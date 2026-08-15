@@ -1,0 +1,157 @@
+---
+// @ts-nocheck
+import Layout from '../../layouts/Layout.astro';
+
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+if (!token || !userId) return Astro.redirect('/connexion');
+
+const sessionId = Astro.url.searchParams.get('session') ?? '';
+
+const difficultyOptions = [
+  { value: 'facile',    label: 'Facile',    detail: 'Fenêtre de 1 seconde pour cliquer' },
+  { value: 'moyen',     label: 'Moyen',     detail: 'Fenêtre de 600 ms pour cliquer' },
+  { value: 'difficile', label: 'Difficile', detail: 'Fenêtre de 350 ms pour cliquer' },
+];
+
+const modeOptions = [
+  { value: 'fixe',      label: 'Bouton fixe',       detail: 'Le bouton reste toujours au centre' },
+  { value: 'aleatoire', label: 'Position aléatoire', detail: 'Le bouton apparaît à un endroit différent à chaque round (×1.5 pts)' },
+];
+
+const steps = [
+  'Choisissez votre difficulté et le mode de jeu.',
+  'Un bouton rouge apparaît à l\'écran — ne cliquez pas encore.',
+  'Dès qu\'il passe au vert, cliquez le plus vite possible !',
+  'Cliquez trop tôt ? Pénalité de 20 pts. Trop lentement ? Round raté.',
+  '5 rounds au total — le meilleur temps moyen rapporte le plus de points.',
+];
+---
+
+<Layout title="Réflexe — Bargo">
+
+  <!-- HERO -->
+  <section class="bg-primary-900 h-70 lg:h-112.5 relative overflow-hidden">
+    <h1 class="absolute top-15 left-5 lg:top-35.25 lg:left-20 text-white m-0 uppercase text-10 lg:text-22.5">Réflexe</h1>
+    <p class="block lg:hidden absolute bottom-6 left-5 right-5 text-neutral-300 text-3.5 font-medium m-0 leading-snug">
+      Rouge = attendez. Vert = cliquez !
+    </p>
+    <p class="hidden lg:block absolute top-67 left-20 text-neutral-200 text-3.5 font-medium w-136.75 m-0 leading-relaxed">
+      Testez la vitesse de vos réflexes. Rouge = patience, vert = feu !<br />
+      Attention, cliquer trop tôt vous pénalise.
+    </p>
+  </section>
+
+  <!-- CONTENU -->
+  <div class="bg-neutral-200 px-4 lg:px-20 py-10 lg:py-20">
+    <div class="max-w-360 mx-auto">
+      <div class="flex flex-col lg:flex-row gap-10 lg:gap-20">
+
+        <!-- Gauche : règles + points -->
+        <div class="lg:w-1/2">
+          <h2 class="m-0 mb-6 text-black">Comment jouer</h2>
+
+          <div class="flex flex-col gap-5 mb-8">
+            {steps.map((rule, i) => (
+              <div class="flex gap-4 items-start">
+                <span class="w-8 h-8 rounded-full bg-primary-900 text-white flex items-center justify-center text-4 font-bold shrink-0">{i + 1}</span>
+                <p class="m-0 text-black text-4 font-medium leading-normal">{rule}</p>
+              </div>
+            ))}
+          </div>
+
+          <!-- Points -->
+          <div class="bg-neutral-800 rounded-0.5 p-6">
+            <h3 class="text-white m-0 mb-1">Points à gagner</h3>
+            <p class="m-0 mb-4 text-neutral-300 text-3.5 font-medium opacity-70">
+              Plus vous réagissez vite, plus vous marquez de points.
+            </p>
+            <div class="flex flex-col gap-2 mb-4">
+              {[
+                { label: 'Facile   (≤ 1000 ms)', pts: 'jusqu\'à 100 pts' },
+                { label: 'Moyen   (≤ 600 ms)',   pts: 'jusqu\'à 200 pts' },
+                { label: 'Difficile (≤ 350 ms)', pts: 'jusqu\'à 300 pts' },
+              ].map(row => (
+                <div class="flex items-center justify-between gap-4">
+                  <p class="m-0 text-neutral-200 text-3.5 font-medium">{row.label}</p>
+                  <span class="text-primary-500 text-4 font-bold">{row.pts}</span>
+                </div>
+              ))}
+            </div>
+            <div class="border-t border-neutral-700 pt-3 flex flex-col gap-2">
+              {[
+                { label: 'Bonus mode aléatoire',  pts: '×1.5' },
+                { label: 'Pénalité clic trop tôt', pts: '−20 pts' },
+                { label: 'Round raté (timeout)',   pts: '0 pt' },
+              ].map(row => (
+                <div class="flex items-center justify-between gap-4">
+                  <p class="m-0 text-neutral-200 text-3.5 font-medium">{row.label}</p>
+                  <span class="text-primary-500 text-4 font-bold">{row.pts}</span>
+                </div>
+              ))}
+            </div>
+            <p class="m-0 mt-3 text-neutral-300 text-3 font-medium opacity-50">Les points sont attribués uniquement pendant une session.</p>
+          </div>
+        </div>
+
+        <!-- Droite : paramètres + lancer -->
+        <div class="lg:w-1/2">
+          <form id="reflexe-form">
+
+            <!-- Difficulté -->
+            <div class="mb-8">
+              <h3 class="m-0 mb-4 text-black">Difficulté</h3>
+              <div class="flex flex-col gap-3">
+                {difficultyOptions.map((opt, i) => (
+                  <label class="cursor-pointer">
+                    <input type="radio" name="difficulty" value={opt.value} class="peer sr-only" checked={i === 0} />
+                    <span class="peer-checked:bg-neutral-800 peer-checked:text-white text-black block px-5 py-3 border-2 border-neutral-800 rounded-0.5 transition-colors">
+                      <span class="text-4 font-medium block">{opt.label}</span>
+                      <span class="text-3 font-medium block mt-0.5 opacity-60">{opt.detail}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <!-- Mode -->
+            <div class="mb-10">
+              <h3 class="m-0 mb-4 text-black">Mode</h3>
+              <div class="flex flex-col gap-3">
+                {modeOptions.map((opt, i) => (
+                  <label class="cursor-pointer">
+                    <input type="radio" name="mode" value={opt.value} class="peer sr-only" checked={i === 0} />
+                    <span class="peer-checked:bg-neutral-800 peer-checked:text-white text-black block px-5 py-3 border-2 border-neutral-800 rounded-0.5 transition-colors">
+                      <span class="text-4 font-medium block">{opt.label}</span>
+                      <span class="text-3 font-medium block mt-0.5 opacity-60">{opt.detail}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <button type="submit"
+              class="w-full lg:w-auto px-12 h-14 bg-neutral-800 text-white text-4 font-medium hover:opacity-90 transition-opacity cursor-pointer border-0">
+              Lancer le jeu
+            </button>
+
+          </form>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script is:inline define:vars={{ sessionId }}>
+    document.getElementById('reflexe-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var data = new FormData(this);
+      var difficulty = data.get('difficulty') || 'facile';
+      var mode = data.get('mode') || 'fixe';
+      var url = '/jeux_reflexe/jouer?difficulty=' + difficulty + '&mode=' + mode;
+      if (sessionId) url += '&session=' + sessionId;
+      window.location.href = url;
+    });
+  </script>
+
+</Layout>

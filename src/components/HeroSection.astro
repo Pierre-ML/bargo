@@ -1,0 +1,20 @@
+---
+interface Props {
+  title: string;
+  descMobile: string;
+  overflow?: boolean;
+}
+const { title, descMobile, overflow = false } = Astro.props;
+---
+
+<section class={`bg-primary-900 h-70 lg:h-112.5 relative${overflow ? ' overflow-hidden' : ''}`}>
+  <h1 class="absolute top-15 left-5 lg:top-35.25 lg:left-20 text-white m-0 uppercase text-10 lg:text-22.5">
+    {title}
+  </h1>
+  <p class="block lg:hidden absolute bottom-6 left-5 right-5 text-neutral-300 text-3.5 font-medium m-0 leading-snug">
+    {descMobile}
+  </p>
+  <p class="hidden lg:block absolute top-67 left-20 text-neutral-200 text-3.5 font-medium w-136.75 m-0 leading-relaxed">
+    <slot />
+  </p>
+</section>

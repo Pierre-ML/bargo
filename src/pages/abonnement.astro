@@ -1,0 +1,177 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { Image } from 'astro:assets';
+import { PB_URL } from '../../backend/backend.js';
+import checkIcon from '../assets/icon/check.svg';
+
+// Récupère l'abonnement actuel si connecté (pas de redirect si non connecté)
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+let userAbonnements = null;
+if (token && userId) {
+  try {
+    const r = await fetch(`${PB_URL}/api/collections/users/records/${userId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (r.ok) { const u = await r.json(); userAbonnements = u.abonnements ?? 'Gratuit'; }
+  } catch (_) {}
+}
+
+// Correspondance plan.id → valeur PocketBase
+const planPbValue = { gratuit: 'Gratuit', vip: 'VIP', premium: 'Premium' };
+
+const plans = [
+  {
+    id: 'gratuit',
+    nom: 'Gratuit',
+    prix: '0€',
+    periode: '/ mois',
+    couleur: '#646262',
+    couleurBtn: '#1e1e1e',
+    badge: null,
+    description: 'L\'essentiel pour découvrir BARGO et organiser vos premières soirées.',
+    avantages: [
+      'Accès à l\'application BARGO',
+      'Création de sessions barathon',
+      'Points standards gagnés',
+      'Accès à la boutique',
+    ],
+    manques: [
+      'Sessions limitées à 2 par mois',
+      'Points bonus',
+    ],
+    cta: 'Commencer gratuitement',
+  },
+  {
+    id: 'vip',
+    nom: 'VIP',
+    prix: '4,99€',
+    periode: '/ mois',
+    couleur: '#347645',
+    couleurBtn: '#347645',
+    badge: 'Populaire',
+    description: 'Plus de sessions et plus de points pour profiter pleinement de vos soirées.',
+    avantages: [
+      'Tout du plan Gratuit',
+      '5 sessions barathon maximum',
+      'Points x2 sur chaque session',
+      'Badge VIP sur votre profil',
+      'Accès prioritaire aux nouveaux bars',
+    ],
+    manques: [
+      'Sessions illimitées',
+    ],
+    cta: 'Choisir VIP',
+  },
+  {
+    id: 'premium',
+    nom: 'Premium',
+    prix: '9,99€',
+    periode: '/ mois',
+    couleur: '#094736',
+    couleurBtn: '#094736',
+    badge: 'Meilleur choix',
+    description: 'L\'expérience BARGO complète, sans limites.',
+    avantages: [
+      'Tout du plan VIP',
+      'Sessions barathon illimitées',
+      'Points x5 sur chaque session',
+      'Badge Premium exclusif',
+      'Accès anticipé aux nouveautés',
+    ],
+    manques: [],
+    cta: 'Choisir Premium',
+  },
+];
+---
+
+<Layout title="Nos abonnements — Bargo">
+
+  <!-- ===== HERO ===== -->
+  <section class="bg-primary-900 h-70 lg:h-112.5 relative">
+    <h1 class="absolute top-15 left-5 lg:top-35.25 lg:left-20 text-white m-0 uppercase text-10 lg:text-22.5">Nos abonnements</h1>
+    <p class="block lg:hidden absolute bottom-6 left-5 right-5 text-neutral-300 text-3.5 font-medium m-0 leading-snug">
+      Choisissez le plan qui correspond à votre façon de barathoner.
+    </p>
+    <p class="hidden lg:block absolute top-67 left-20 text-neutral-200 text-3.5 font-medium w-136.75 m-0 leading-relaxed">
+      Ici vous pouvez prendre les abonnements qui permettront d'avoir un petit plus sur vos soirées&nbsp;!
+    </p>
+  </section>
+
+  <!-- ===== CARDS ===== -->
+  <div class="bg-neutral-200 px-4 lg:px-20 py-10 lg:py-20">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-10">
+
+      {plans.map(plan => (
+        <div class="bg-white rounded-1.25 shadow-sm flex flex-col overflow-hidden">
+
+          <!-- En-tête coloré -->
+          <div class="px-8.75 py-7.5 relative" style={`background-color: ${plan.couleur};`}>
+            {plan.badge && (
+              <span class="absolute top-5 right-5 bg-primary-500 text-primary-900 text-3 font-bold px-2.5 py-1 rounded-full uppercase tracking-0.125">
+                {plan.badge}
+              </span>
+            )}
+            <h3 class="text-white m-0 mb-4 uppercase tracking-0.5">{plan.nom}</h3>
+            <div class="flex items-baseline gap-1.5">
+              <span class="text-white font-bold leading-none" style="font-size: 50px; font-family: Manrope, sans-serif;">{plan.prix}</span>
+              <span class="text-neutral-300 text-4 font-medium">{plan.periode}</span>
+            </div>
+          </div>
+
+          <!-- Corps -->
+          <div class="px-8.75 py-7.5 flex flex-col flex-1">
+
+            <p class="text-neutral-500 text-3.5 font-medium leading-relaxed m-0 mb-6">{plan.description}</p>
+
+            <!-- Avantages -->
+            <ul class="list-none m-0 p-0 flex flex-col gap-3 mb-4">
+              {plan.avantages.map(item => (
+                <li class="flex items-start gap-2.5">
+                  <div class="shrink-0 mt-0.5 w-4.5 h-4.5 rounded-full bg-primary-500 flex items-center justify-center">
+                    <Image src={checkIcon} alt="" width={11} height={11} class="brightness-0 invert" />
+                  </div>
+                  <span class="text-black text-4 font-medium leading-snug">{item}</span>
+                </li>
+              ))}
+              {plan.manques.map(item => (
+                <li class="flex items-start gap-2.5">
+                  <div class="shrink-0 mt-0.5 w-4.5 h-4.5 rounded-full bg-neutral-300 flex items-center justify-center">
+                    <span class="block w-2.5 h-0.5 bg-neutral-500 rounded-full"></span>
+                  </div>
+                  <span class="text-neutral-500 text-4 font-medium leading-snug">{item}</span>
+                </li>
+              ))}
+            </ul>
+
+            <!-- Spacer -->
+            <div class="flex-1"></div>
+
+            <!-- Bouton -->
+            {userAbonnements && userAbonnements === planPbValue[plan.id as keyof typeof planPbValue] ? (
+              <div class="mt-6 w-full h-13 flex items-center justify-center text-white text-4 font-medium rounded-0.75 opacity-60 cursor-default"
+                style={`background-color: ${plan.couleurBtn};`}>
+                Votre plan actuel
+              </div>
+            ) : plan.id === 'gratuit' ? (
+              <a href="/"
+                class="mt-6 w-full h-13 flex items-center justify-center text-white text-4 font-medium hover:brightness-110 active:scale-[0.97] transition-all no-underline rounded-0.75"
+                style={`background-color: ${plan.couleurBtn};`}>
+                {plan.cta}
+              </a>
+            ) : (
+              <a href={`/paiement?plan=${plan.id}`}
+                class="mt-6 w-full h-13 flex items-center justify-center text-white text-4 font-medium hover:brightness-110 active:scale-[0.97] transition-all no-underline rounded-0.75"
+                style={`background-color: ${plan.couleurBtn};`}>
+                {plan.cta}
+              </a>
+            )}
+
+          </div>
+        </div>
+      ))}
+
+    </div>
+  </div>
+
+</Layout>

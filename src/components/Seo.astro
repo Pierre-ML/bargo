@@ -1,0 +1,40 @@
+---
+interface Props {
+  title?: string;
+  description?: string;
+  image?: string;
+  url?: string;
+  type?: string;
+  noindex?: boolean;
+}
+
+const {
+  title = 'Bargo — Organisez votre barathon',
+  description = 'Bargo vous aide à organiser et vivre des barathons inoubliables. Découvrez nos bars partenaires, nos jeux et créez votre parcours.',
+  image,
+  url,
+  type = 'website',
+  noindex = false,
+} = Astro.props;
+---
+
+<title>{title}</title>
+<meta name="description" content={description} />
+{noindex && <meta name="robots" content="noindex, nofollow" />}
+
+<!-- Open Graph -->
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:type" content={type} />
+<meta property="og:locale" content="fr_FR" />
+{url && <meta property="og:url" content={url} />}
+{image && <meta property="og:image" content={image} />}
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+{image && <meta name="twitter:image" content={image} />}
+
+<!-- Canonical -->
+{url && <link rel="canonical" href={url} />}

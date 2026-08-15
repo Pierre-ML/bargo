@@ -1,0 +1,143 @@
+---
+import { Image } from 'astro:assets';
+import footerBg    from '../assets/img/footer.avif';
+import logoLight   from '../assets/icon/logo-light.svg';
+import iconFb      from '../assets/icon/facebook.svg';
+import iconInsta   from '../assets/icon/insta.svg';
+import iconDiscord from '../assets/icon/discord.svg';
+---
+
+<!-- ===== MOBILE FOOTER ===== -->
+<footer class="block lg:hidden bg-neutral-800 px-5 pt-10 pb-6">
+
+  <!-- Logo -->
+  <Image src={logoLight} alt="Bargo" height={36} class="mb-8" />
+
+  <!-- 2 colonnes de liens -->
+  <div class="flex gap-8 mb-8">
+    <div class="flex flex-col gap-4">
+      <p class="font-bold text-3.25 leading-snug text-white m-0 uppercase tracking-wider">Navigation</p>
+      <a href="/bar"       class="text-neutral-200 text-3.5 font-medium hover:opacity-70 transition-opacity">Voir tous les bars</a>
+      <a href="/jeux"      class="text-neutral-200 text-3.5 font-medium hover:opacity-70 transition-opacity">Liste des jeux</a>
+      <a href="/boutique"  class="text-neutral-200 text-3.5 font-medium hover:opacity-70 transition-opacity">Boutique</a>
+    </div>
+    <div class="flex flex-col gap-4">
+      <p class="font-bold text-3.25 leading-snug text-white m-0 uppercase tracking-wider">Informations</p>
+      <a href="/Apropos"   class="text-neutral-200 text-3.5 font-medium hover:opacity-70 transition-opacity">A propos</a>
+      <a href="/contact"   class="text-neutral-200 text-3.5 font-medium hover:opacity-70 transition-opacity">Contact</a>
+      <a href="/abonnement" class="text-neutral-200 text-3.5 font-medium hover:opacity-70 transition-opacity">Abonnement</a>
+    </div>
+  </div>
+
+  <!-- Prévention -->
+  <p class="text-neutral-200/60 text-3 font-medium leading-normal mb-6">
+    L'abus d'alcool est dangereux pour la santé. BARGO vous accompagne pour des soirées responsables.
+  </p>
+
+  <!-- Réseaux sociaux -->
+  <div class="flex gap-5 mb-8">
+    <a href="#" aria-label="Facebook"  class="opacity-80 hover:opacity-100 transition-opacity">
+      <Image src={iconFb}      alt="Facebook"  width={22} height={22} />
+    </a>
+    <a href="#" aria-label="Instagram" class="opacity-80 hover:opacity-100 transition-opacity">
+      <Image src={iconInsta}   alt="Instagram" width={22} height={22} />
+    </a>
+    <a href="#" aria-label="Discord"   class="opacity-80 hover:opacity-100 transition-opacity">
+      <Image src={iconDiscord} alt="Discord"   width={22} height={22} />
+    </a>
+  </div>
+
+  <!-- Séparateur + bas de page -->
+  <div class="border-t border-white/10 pt-4 flex justify-between items-center">
+    <a href="/mention_legal" class="text-neutral-200/60 text-3 font-medium hover:opacity-100 transition-opacity">Mentions légales</a>
+    <p class="text-neutral-200/60 text-3 font-medium m-0">© 2026 BARGO</p>
+  </div>
+
+</footer>
+
+<!-- ===== DESKTOP FOOTER ===== -->
+<footer class="hidden lg:block relative w-full h-114.25 overflow-hidden">
+
+  <!-- Image de fond -->
+  <Image src={footerBg} alt="" class="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+
+  <!-- Overlay dégradé -->
+  <div class="absolute inset-0 footer-overlay"></div>
+
+  <!-- Contenu centré max 1440px -->
+  <div class="absolute top-0 h-full w-full max-w-360 left-1/2 -translate-x-1/2 px-20 z-10 flex flex-col">
+
+    <!-- Logo -->
+    <Image src={logoLight} alt="Bargo" height={44} class="mt-8.75 shrink-0" />
+
+    <!-- Colonnes -->
+    <div class="mt-11 flex justify-between shrink-0">
+
+      <!-- NAVIGATION -->
+      <div class="flex flex-col gap-8.75">
+        <p class="font-bold text-4 leading-snug text-white m-0">NAVIGATION</p>
+        <div class="flex flex-col gap-4.5">
+          <a href="/bar"      class="font-medium text-4 leading-snug text-neutral-200 hover:opacity-70 transition-opacity">Voir tous les bars</a>
+          <a href="/jeux"     class="font-medium text-4 leading-snug text-neutral-200 hover:opacity-70 transition-opacity">Liste des jeux</a>
+          <a href="/boutique" class="font-medium text-4 leading-snug text-neutral-200 hover:opacity-70 transition-opacity">Boutique</a>
+        </div>
+      </div>
+
+      <!-- INFORMATIONS -->
+      <div class="flex flex-col gap-8.75">
+        <p class="font-bold text-4 leading-snug text-white m-0">INFORMATIONS</p>
+        <div class="flex flex-col gap-4.5">
+          <a href="/abonnement" class="font-medium text-4 leading-snug text-neutral-200 hover:opacity-70 transition-opacity">Abonnement</a>
+          <a href="/Apropos"     class="font-medium text-4 leading-snug text-neutral-200 hover:opacity-70 transition-opacity">A propos</a>
+          <a href="/contact"     class="font-medium text-4 leading-snug text-neutral-200 hover:opacity-70 transition-opacity">Contact</a>
+        </div>
+      </div>
+
+      <!-- PRÉVENTION -->
+      <div class="flex flex-col gap-8.75 w-65.25">
+        <p class="font-bold text-4 leading-snug text-white m-0">PRÉVENTION</p>
+        <p class="font-medium text-4 leading-snug text-neutral-200 m-0">
+          Votre sécurité avant tout<br />
+          L'abus d'alcool est dangereux pour la santé. BARGO vous accompagne pour des soirées responsables.
+        </p>
+      </div>
+
+      <!-- SUIVEZ-NOUS -->
+      <div class="flex flex-col gap-8.75">
+        <p class="font-bold text-4 leading-snug text-white m-0">SUIVEZ-NOUS</p>
+        <div class="flex gap-7.25 items-center">
+          <a href="#" aria-label="Facebook" class="opacity-90 hover:opacity-100 transition-opacity">
+            <Image src={iconFb}      alt="Facebook"  width={24} height={24} />
+          </a>
+          <a href="#" aria-label="Instagram" class="opacity-90 hover:opacity-100 transition-opacity">
+            <Image src={iconInsta}   alt="Instagram" width={24} height={24} />
+          </a>
+          <a href="#" aria-label="Discord" class="opacity-90 hover:opacity-100 transition-opacity">
+            <Image src={iconDiscord} alt="Discord"   width={24} height={24} />
+          </a>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Spacer -->
+    <div class="mt-23 shrink-0"></div>
+
+    <!-- Ligne séparatrice -->
+    <div class="border-t border-neutral-200/30 shrink-0"></div>
+
+    <!-- Bas de page -->
+    <div class="flex justify-between items-center py-5.75 shrink-0">
+      <a href="/mention_legal" class="font-medium text-3.5 leading-tight text-neutral-200 hover:opacity-70 transition-opacity">Mentions légales</a>
+      <p class="font-medium text-3.5 leading-tight text-neutral-200 m-0">© 2026 BARGO</p>
+    </div>
+
+  </div>
+
+</footer>
+
+<style>
+  .footer-overlay {
+    background: linear-gradient(to bottom, rgba(30, 30, 30, 0.7), #1e1e1e);
+  }
+</style>

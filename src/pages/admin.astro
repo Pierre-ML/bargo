@@ -1,0 +1,665 @@
+---
+// @ts-nocheck
+import Layout from '../layouts/Layout.astro';
+import { Image } from 'astro:assets';
+import { PB_URL } from '../../backend/backend.js';
+import arrowLeftIcon from '../assets/icon/arrow_left_lg.svg';
+import '../styles/admin.css';
+
+// ── Auth guard ────────────────────────────────────────────────────────────────
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+if (!token || !userId) return Astro.redirect('/connexion');
+
+const meRes = await fetch(`${PB_URL}/api/collections/users/records/${userId}`, {
+  headers: { Authorization: `Bearer ${token}` }
+});
+if (!meRes.ok) return Astro.redirect('/connexion');
+const me = await meRes.json();
+if (!me.admin) return Astro.redirect('/');
+
+// ── Fetch all data ────────────────────────────────────────────────────────────
+const [usersRes, barsRes, sessionsRes, jeuxRes, boisonsRes, boutiqueRes] = await Promise.all([
+  fetch(`${PB_URL}/api/collections/users/records?perPage=200&sort=created`,
+    { headers: { Authorization: `Bearer ${token}` } }),
+  fetch(`${PB_URL}/api/collections/bar/records?perPage=200&sort=nom`),
+  fetch(`${PB_URL}/api/collections/session_barathon/records?perPage=200&sort=-created`,
+    { headers: { Authorization: `Bearer ${token}` } }),
+  fetch(`${PB_URL}/api/collections/jeux/records?perPage=200&sort=nom`),
+  fetch(`${PB_URL}/api/collections/boison/records?perPage=200&sort=nom`),
+  fetch(`${PB_URL}/api/collections/boutique/records?perPage=200&sort=nom`,
+    { headers: { Authorization: `Bearer ${token}` } }),
+]);
+
+const allUsers    = ((await usersRes.json()).items    ?? []);
+const allBars     = ((await barsRes.json()).items     ?? []);
+const allSessions = ((await sessionsRes.json()).items ?? []);
+const allJeux     = ((await jeuxRes.json()).items     ?? []);
+const allBoisons  = ((await boisonsRes.json()).items  ?? []);
+const allBoutique = ((await boutiqueRes.json()).items ?? []);
+
+const vipCount      = allUsers.filter(u => u.abonnements === 'VIP').length;
+const premiumCount  = allUsers.filter(u => u.abonnements === 'Premium').length;
+const gratuitCount  = allUsers.length - vipCount - premiumCount;
+const monthlyRev    = (vipCount * 4.99 + premiumCount * 9.99);
+const weeklyRev     = monthlyRev / 4.33;
+const fmtEur = (n) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+
+const sessionEnAttente  = allSessions.filter(s => (s.etat_session ?? 'pas_commencer') === 'pas_commencer').length;
+const sessionEnCours    = allSessions.filter(s => s.etat_session === 'en_cours').length;
+const sessionTerminees  = allSessions.filter(s => s.etat_session === 'fini').length;
+
+const jeuxTypesMap = {};
+allJeux.forEach(j => { const t = j.type_du_jeux || 'Autre'; jeuxTypesMap[t] = (jeuxTypesMap[t] || 0) + 1; });
+
+const chartData = {
+  abonnements: { labels: ['Gratuit', 'VIP', 'Premium'],       data: [gratuitCount,      vipCount,       premiumCount]       },
+  sessions:    { labels: ['En attente', 'En cours', 'Terminées'], data: [sessionEnAttente, sessionEnCours, sessionTerminees] },
+  jeux:        { labels: Object.keys(jeuxTypesMap),           data: Object.values(jeuxTypesMap)                              },
+};
+
+const questionsRes = await fetch(`${PB_URL}/api/collections/jeux_questionaire/records?perPage=500&sort=theme`,
+  { headers: { Authorization: `Bearer ${token}` } });
+const allQuestions = ((await questionsRes.json()).items ?? []).map(q => ({
+  id: q.id, question: q.question ?? '',
+  choix_1: q.choix_1 ?? '', choix_2: q.choix_2 ?? '',
+  choix_3: q.choix_3 ?? '', choix_4: q.choix_4 ?? '',
+  reponse: [q.reponse_1, q.reponse_2, q.reponse_3, q.reponse_4].findIndex(v => v === true),
+  theme: q.theme ?? '',
+}));
+
+const pageData = JSON.stringify({
+  PB_URL, token, userId,
+  allJeux: allJeux.map(j => ({
+    id: j.id, collectionName: j.collectionName,
+    nom: j.nom ?? '', description: j.description ?? '',
+    type_du_jeux: j.type_du_jeux ?? '',
+    img: Array.isArray(j.img) ? (j.img[0] ?? null) : (j.img ?? null),
+  })),
+  allQuestions,
+  allBars: allBars.map(b => ({
+    id: b.id, collectionName: b.collectionName,
+    nom: b.nom ?? '', adresse: b.adresse ?? '', description: b.description ?? '',
+    lat: b.localisation?.lat ?? '', lon: b.localisation?.lon ?? '',
+    img: b.img?.[0] ?? null,
+    h_lundi:    b.horaires_lundi    ?? '', h_mardi:    b.horaires_mardi    ?? '',
+    h_mercredi: b.horaires_mercredi ?? '', h_jeudi:    b.horaires_jeudi    ?? '',
+    h_vendredi: b.horaires_vendredi ?? '', h_samedi:   b.horaires_samedi   ?? '',
+    h_dimanche: b.horaires_dimanche ?? '',
+  })),
+  allBoisons: allBoisons.map(b => ({
+    id: b.id, collectionName: b.collectionName,
+    nom: b.nom ?? '', img: b.img ?? null,
+  })),
+  allBoutique: allBoutique.map(b => ({
+    id: b.id, collectionName: b.collectionName,
+    nom: b.nom ?? '', prix: b.prix ?? 0, type: b.type ?? '',
+    type_decoration_avatar: b.type_decoration_avatar ?? null,
+    type_titre: b.type_titre ?? '',
+    type_them:  b.type_them  ?? null,
+  })),
+});
+---
+
+<Layout title="Administration — Bargo">
+
+<!-- Classe admin-page sur le body pour scoper le CSS mobile -->
+<script is:inline>document.body.classList.add('admin-page')</script>
+
+<!-- Barre mobile admin -->
+<div id="admin-mob-bar" class="flex lg:hidden items-center justify-between bg-neutral-800 px-4 h-14 sticky top-23 z-49 shadow-md">
+  <div class="flex items-center gap-2.5">
+    <span class="text-2.5 font-bold uppercase tracking-widest text-primary-500">Bargo</span>
+    <span class="text-2.5 font-bold uppercase tracking-widest text-neutral-200/50">Admin</span>
+  </div>
+  <button id="admin-burger" class="relative w-6.5 h-5 bg-transparent border-0 cursor-pointer p-0 shrink-0">
+    <span class="adm-bar absolute left-0 w-full h-0.5 bg-neutral-200 top-0 rounded-sm" style="transform-origin:center; transition:transform 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease;"></span>
+    <span class="adm-bar absolute left-0 w-full h-0.5 bg-neutral-200 top-2.25 rounded-sm" style="transform-origin:center; transition:transform 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease;"></span>
+    <span class="adm-bar absolute left-0 w-full h-0.5 bg-neutral-200 top-4.5 rounded-sm" style="transform-origin:center; transition:transform 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease;"></span>
+  </button>
+</div>
+
+<!-- Backdrop mobile -->
+<div id="admin-backdrop" class="fixed inset-0 bg-black/55 z-49 hidden"></div>
+
+<div class="flex min-h-0 lg:min-h-[calc(100vh-92px)] bg-zinc-100">
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- SIDEBAR                                                               -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <aside class="admin-sidebar fixed top-37 left-0 bottom-0 w-70 z-50 overflow-y-auto bg-neutral-800 flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.4)] lg:static lg:top-auto lg:bottom-auto lg:left-auto lg:w-60 lg:shrink-0 lg:z-auto lg:overflow-y-visible lg:shadow-none lg:py-7 lg:px-4">
+
+    <div class="hidden lg:block px-2 pb-6 border-b border-white/8">
+      <p class="text-2.5 font-bold uppercase tracking-widest text-primary-500 m-0 mb-0.5">Bargo</p>
+      <p class="text-4 font-semibold text-white m-0">Administration</p>
+    </div>
+
+    <nav class="mt-2 px-2 flex-1 lg:mt-4 lg:px-0">
+      {[
+        { id: 'dashboard', label: 'Tableau de bord' },
+        { id: 'users',     label: 'Utilisateurs',  count: allUsers.length },
+        { id: 'bars',      label: 'Bars',          count: allBars.length },
+        { id: 'sessions',  label: 'Sessions',      count: allSessions.length },
+        { id: 'jeux',      label: 'Jeux',          count: allJeux.length },
+        { id: 'boisons',   label: 'Boissons',      count: allBoisons.length },
+        { id: 'boutique',  label: 'Boutique',      count: allBoutique.length },
+      ].map((item, i) => (
+        <button
+          class={`nav-item flex items-center gap-2.5 w-full h-13 px-3 border-0 rounded-lg cursor-pointer text-left mb-0.5 hover:bg-white/7 hover:text-[rgba(247,241,237,0.85)] transition-colors lg:h-auto lg:py-2.5 lg:rounded-md ${i === 0 ? 'bg-[rgba(114,192,115,0.15)] text-primary-500' : 'bg-transparent text-[rgba(247,241,237,0.55)]'}`}
+          data-section={item.id}>
+          <span class="text-3.5 lg:text-3.25 font-semibold lg:font-medium flex-1 leading-tight">{item.label}</span>
+          {item.count !== undefined && (
+            <span class={`inline-flex items-center justify-center text-2.75 font-bold px-2 py-0.5 rounded-full min-w-7 ${i === 0 ? 'bg-[rgba(114,192,115,0.2)] text-primary-500' : 'bg-white/8 text-[rgba(247,241,237,0.4)]'}`}>{item.count}</span>
+          )}
+        </button>
+      ))}
+    </nav>
+
+    <div class="hidden lg:block pt-4 px-2 border-t border-white/8">
+      <p class="text-3 font-medium text-neutral-200/35 m-0 mb-0.5">Connecté en tant que</p>
+      <p class="text-3.25 font-semibold text-neutral-200/70 m-0">{me.pseudo || me.prenom || me.email}</p>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- MAIN                                                                  -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <main class="w-full overflow-y-visible p-4 lg:flex-1 lg:overflow-y-auto lg:px-10 lg:py-9">
+
+    <!-- ── Section : Tableau de bord ──────────────────────────────────────── -->
+    <section id="section-dashboard" class="admin-section">
+      <h3 class="text-zinc-900 m-0 mb-1.5">Tableau de bord</h3>
+      <p class="text-zinc-400 text-3.5 font-medium m-0 mb-7">Vue d'ensemble de la plateforme.</p>
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-9">
+        {[
+          { label: 'Utilisateurs', value: allUsers.length,    color: '#347645', bg: '#edf7ee' },
+          { label: 'Bars',         value: allBars.length,     color: '#2563eb', bg: '#eff6ff' },
+          { label: 'Sessions',     value: allSessions.length, color: '#d97706', bg: '#fffbeb' },
+          { label: 'Jeux',         value: allJeux.length,     color: '#7c3aed', bg: '#f5f3ff' },
+        ].map(s => (
+          <div class="bg-white rounded-xl px-6 py-5.5 border border-gray-200 shadow-sm">
+            <p style={`font-size:36px; font-weight:700; color:${s.color}; margin:0 0 6px; line-height:1;`}>{s.value}</p>
+            <p class="text-3.25 font-medium text-zinc-400 m-0">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <!-- ── Abonnements & Revenus ─────────────────────────────────────────── -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-9">
+        <div class="bg-white rounded-xl px-6 py-5.5 border border-gray-200 shadow-sm">
+          <p class="text-9 font-bold text-violet-700 m-0 mb-1 leading-none">{vipCount}</p>
+          <p class="text-3.25 font-medium text-zinc-400 m-0 mb-1.5">Abonnés VIP</p>
+          <span class="text-2.75 font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full">4,99 € / mois</span>
+        </div>
+        <div class="bg-white rounded-xl px-6 py-5.5 border border-gray-200 shadow-sm">
+          <p class="text-9 font-bold text-cyan-600 m-0 mb-1 leading-none">{premiumCount}</p>
+          <p class="text-3.25 font-medium text-zinc-400 m-0 mb-1.5">Abonnés Premium</p>
+          <span class="text-2.75 font-bold text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded-full">9,99 € / mois</span>
+        </div>
+        <div class="bg-white rounded-xl px-6 py-5.5 border border-gray-200 shadow-sm">
+          <p class="text-7 font-bold text-green-600 m-0 mb-1 leading-none">{fmtEur(weeklyRev)}</p>
+          <p class="text-3.25 font-medium text-zinc-400 m-0 mb-1.5">Revenus / semaine</p>
+          <span class="text-2.75 font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">estimé</span>
+        </div>
+        <div class="bg-white rounded-xl px-6 py-5.5 border border-gray-200 shadow-sm">
+          <p class="text-7 font-bold text-amber-600 m-0 mb-1 leading-none">{fmtEur(monthlyRev)}</p>
+          <p class="text-3.25 font-medium text-zinc-400 m-0 mb-1.5">Revenus / mois</p>
+          <span class="text-2.75 font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">estimé</span>
+        </div>
+      </div>
+
+      <!-- ── Graphiques ───────────────────────────────────────────────────── -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-9">
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-5.5">
+          <p class="text-3.25 font-bold uppercase tracking-wider text-zinc-400 m-0 mb-4">Abonnements</p>
+          <div class="relative h-52"><canvas id="chart-abonnements"></canvas></div>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-5.5">
+          <p class="text-3.25 font-bold uppercase tracking-wider text-zinc-400 m-0 mb-4">Sessions par état</p>
+          <div class="relative h-52"><canvas id="chart-sessions"></canvas></div>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-5.5">
+          <p class="text-3.25 font-bold uppercase tracking-wider text-zinc-400 m-0 mb-4">Jeux par type</p>
+          <div class="relative h-52"><canvas id="chart-jeux"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Sessions récentes -->
+        <div class="bg-white rounded-xl px-6 py-5.5 border border-gray-200 shadow-sm">
+          <p class="text-3.25 font-bold uppercase tracking-wider text-zinc-400 m-0 mb-4">Sessions récentes</p>
+          {allSessions.slice(0, 5).map(s => {
+            const etat = s.etat_session ?? 'pas_commencer';
+            const map = { pas_commencer: ['En attente', '#d97706', '#fffbeb'], en_cours: ['En cours', '#16a34a', '#f0fdf4'], fini: ['Terminée', '#9ca3af', '#f9fafb'] };
+            const [label, color, bg] = map[etat] ?? ['—', '#aaa', '#f9fafb'];
+            return (
+              <div class="flex items-center justify-between py-2.25 border-b border-gray-100">
+                <p class="text-3.5 font-medium text-zinc-900 m-0">{s.nom ?? '—'}</p>
+                <span style={`font-size:11px; font-weight:700; color:${color}; background:${bg}; padding:3px 9px; border-radius:20px;`}>{label}</span>
+              </div>
+            );
+          })}
+          {allSessions.length === 0 && <p class="text-zinc-300 text-3.5">Aucune session.</p>}
+        </div>
+        <!-- Derniers inscrits -->
+        <div class="bg-white rounded-xl px-6 py-5.5 border border-gray-200 shadow-sm">
+          <p class="text-3.25 font-bold uppercase tracking-wider text-zinc-400 m-0 mb-4">Derniers inscrits</p>
+          {allUsers.slice(-5).reverse().map(u => (
+            <div class="flex items-center gap-2.5 py-2.25 border-b border-gray-100">
+              <div class="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center shrink-0">
+                <span class="text-white text-3.25 font-bold">{(u.pseudo || u.prenom || '?').charAt(0).toUpperCase()}</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="text-3.25 font-semibold text-zinc-900 m-0 truncate">{u.pseudo || `${u.prenom ?? ''} ${u.nom ?? ''}`.trim() || '—'}</p>
+                <p class="text-2.75 text-zinc-400 m-0">{u.email}</p>
+              </div>
+              {u.admin && <span class="text-2.5 font-bold text-primary-600 bg-green-50 px-1.75 py-0.5 rounded-full">Admin</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Section : Utilisateurs ──────────────────────────────────────────── -->
+    <section id="section-users" class="admin-section hidden">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h3 class="text-zinc-900 m-0 mb-1">Utilisateurs</h3>
+          <p class="text-zinc-400 text-3.5 font-medium m-0">{allUsers.length} compte{allUsers.length > 1 ? 's' : ''} enregistré{allUsers.length > 1 ? 's' : ''}</p>
+        </div>
+      </div>
+
+      <div class="admin-table-wrap bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="hidden lg:grid lg:grid-cols-[1fr_200px_80px_90px_80px] lg:px-5 lg:py-3 lg:bg-gray-50 lg:border-b lg:border-gray-200">
+          <p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">Utilisateur</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">Email</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">Points</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">Rôle</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0"></p>
+        </div>
+        {allUsers.map(u => (
+          <div data-row-user={u.id} class="grid grid-cols-[1fr_auto_auto] lg:grid-cols-[1fr_200px_80px_90px_80px] items-center px-5 py-3.5 border-b border-gray-100">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8.5 h-8.5 rounded-full bg-primary-600 flex items-center justify-center shrink-0">
+                <span class="text-white text-3.25 font-bold">{(u.pseudo || u.prenom || '?').charAt(0).toUpperCase()}</span>
+              </div>
+              <div>
+                <p class="text-3.5 font-semibold text-zinc-900 m-0">{u.pseudo || `${u.prenom ?? ''} ${u.nom ?? ''}`.trim() || '—'}</p>
+                <p class="text-2.75 text-zinc-400 m-0">ID: {u.id.slice(0,8)}…</p>
+              </div>
+            </div>
+            <p class="text-3.25 text-zinc-600 m-0 truncate pr-4">{u.email}</p>
+            <p class="text-3.25 font-semibold text-zinc-900 m-0">{u.points ?? 0}</p>
+            <div>
+              {u.id === userId
+                ? <span class="text-2.75 font-bold text-primary-600 bg-green-50 px-2.5 py-0.75 rounded-full">Vous</span>
+                : <button data-action="toggle-admin" data-id={u.id} data-admin={String(u.admin ?? false)}
+                    style={`height:26px; padding:0 12px; font-size:11px; font-weight:700; border:none; cursor:pointer; border-radius:20px; background:${u.admin ? '#edf7ee' : '#f3f4f6'}; color:${u.admin ? '#347645' : '#888'};`}>
+                    {u.admin ? 'Admin' : 'User'}
+                  </button>
+              }
+            </div>
+            <div class="flex justify-end">
+              {u.id !== userId && (
+                <button data-action="delete-user" data-id={u.id} class="h-7 px-3 bg-red-50 border border-red-200 text-red-500 text-3 font-semibold cursor-pointer rounded-md hover:bg-red-100 transition-colors">Supprimer</button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <!-- ── Section : Bars ──────────────────────────────────────────────────── -->
+    <section id="section-bars" class="admin-section hidden">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h3 class="text-zinc-900 m-0 mb-1">Bars</h3>
+          <p class="text-zinc-400 text-3.5 font-medium m-0">{allBars.length} bar{allBars.length > 1 ? 's' : ''} dans la base</p>
+        </div>
+        <button data-action="open-bar-form" data-id="" class="h-9.5 px-4.5 bg-primary-600 border-0 text-white text-3.25 font-bold cursor-pointer rounded-lg hover:bg-primary-900 transition-colors">+ Ajouter un bar</button>
+      </div>
+
+      <div class="admin-table-wrap bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="hidden lg:grid lg:grid-cols-[1fr_1fr_120px] lg:px-5 lg:py-3 lg:bg-gray-50 lg:border-b lg:border-gray-200">
+          <p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">Nom</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">Adresse</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0"></p>
+        </div>
+        {allBars.map(b => (
+          <div data-row-bar={b.id} class="grid grid-cols-[1fr_auto] lg:grid-cols-[1fr_1fr_120px] items-center px-5 py-3.5 border-b border-gray-100">
+            <div>
+              <p class="text-3.5 font-semibold text-zinc-900 m-0">{b.nom}</p>
+              <p class="text-2.75 text-zinc-400 m-0">ID: {b.id.slice(0,8)}…</p>
+            </div>
+            <p class="hidden lg:block text-3.25 text-zinc-600 m-0 truncate pr-4">{b.adresse ?? '—'}</p>
+            <div class="flex justify-end gap-2">
+              <button data-action="open-bar-form" data-id={b.id} class="h-7 px-3 bg-green-50 border border-green-100 text-primary-600 text-3 font-semibold cursor-pointer rounded-md hover:bg-green-100 transition-colors">Modifier</button>
+              <button data-action="delete-bar" data-id={b.id} class="h-7 px-3 bg-red-50 border border-red-200 text-red-500 text-3 font-semibold cursor-pointer rounded-md hover:bg-red-100 transition-colors">Supp.</button>
+            </div>
+          </div>
+        ))}
+        {allBars.length === 0 && <p class="text-zinc-300 text-3.5 p-5">Aucun bar.</p>}
+      </div>
+    </section>
+
+    <!-- ── Section : Sessions ─────────────────────────────────────────────── -->
+    <section id="section-sessions" class="admin-section hidden">
+      <div class="mb-6">
+        <h3 class="text-zinc-900 m-0 mb-1">Sessions</h3>
+        <p class="text-zinc-400 text-3.5 font-medium m-0">{allSessions.length} session{allSessions.length > 1 ? 's' : ''} créée{allSessions.length > 1 ? 's' : ''}</p>
+      </div>
+
+      <div class="admin-table-wrap bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="grid grid-cols-[1fr_130px_140px_80px] px-5 py-3 bg-gray-50 border-b border-gray-200">
+          <p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">Nom</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">Date</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">État</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0"></p>
+        </div>
+        {allSessions.map(s => {
+          const etat = s.etat_session ?? 'pas_commencer';
+          const map = {
+            pas_commencer: ['En attente', '#d97706', '#fffbeb'],
+            en_cours:      ['En cours',   '#16a34a', '#f0fdf4'],
+            fini:          ['Terminée',   '#9ca3af', '#f9fafb'],
+          };
+          const [label, color, bg] = map[etat] ?? ['—', '#aaa', '#f9fafb'];
+          return (
+            <div data-row-session={s.id} class="grid grid-cols-[1fr_130px_140px_80px] items-center px-5 py-3.5 border-b border-gray-100">
+              <div>
+                <p class="text-3.5 font-semibold text-zinc-900 m-0">{s.nom ?? '—'}</p>
+                <p class="text-2.75 text-zinc-400 m-0">ID: {s.id.slice(0,8)}…</p>
+              </div>
+              <p class="text-3.25 text-zinc-600 m-0">{s.date_heur_depart?.split(' ')[0] ?? '—'}</p>
+              <span style={`font-size:11px; font-weight:700; color:${color}; background:${bg}; padding:4px 11px; border-radius:20px; width:fit-content;`}>{label}</span>
+              <div class="flex justify-end">
+                <button data-action="delete-session" data-id={s.id} class="h-7 px-3 bg-red-50 border border-red-200 text-red-500 text-3 font-semibold cursor-pointer rounded-md hover:bg-red-100 transition-colors">Supp.</button>
+              </div>
+            </div>
+          );
+        })}
+        {allSessions.length === 0 && <p class="text-zinc-300 text-3.5 p-5">Aucune session.</p>}
+      </div>
+    </section>
+
+    <!-- ── Section : Jeux ─────────────────────────────────────────────────── -->
+    <section id="section-jeux" class="admin-section hidden">
+      <div class="mb-6">
+        <h3 class="text-zinc-900 m-0 mb-1">Jeux</h3>
+        <p class="text-zinc-400 text-3.5 font-medium m-0">{allJeux.length} jeu{allJeux.length > 1 ? 'x' : ''} disponible{allJeux.length > 1 ? 's' : ''}</p>
+      </div>
+
+      <div class="admin-table-wrap bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="grid grid-cols-[1fr_1fr_180px] px-5 py-3 bg-gray-50 border-b border-gray-200">
+          <p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">Nom</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">Type</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0"></p>
+        </div>
+        {allJeux.map(j => (
+          <div data-row-jeu={j.id} class="grid grid-cols-[1fr_1fr_180px] items-center px-5 py-3.5 border-b border-gray-100">
+            <p class="text-3.5 font-semibold text-zinc-900 m-0">{j.nom ?? '—'}</p>
+            <span class="text-3 font-semibold text-violet-700 bg-violet-50 px-2.5 py-0.75 rounded-full w-fit max-w-full truncate">{j.type_du_jeux ?? '—'}</span>
+            <div class="flex justify-end gap-2">
+              <button data-action="open-jeu-form" data-id={j.id} class="h-7 px-3 bg-green-50 border border-green-100 text-primary-600 text-3 font-semibold cursor-pointer rounded-md hover:bg-green-100 transition-colors">Modifier</button>
+              <button data-action="open-jeu-questions" data-id={j.id} class="h-7 px-3 bg-primary-600 border-0 text-white text-3 font-bold cursor-pointer rounded-lg hover:bg-primary-900 transition-colors">Questions</button>
+            </div>
+          </div>
+        ))}
+        {allJeux.length === 0 && <p class="text-zinc-300 text-3.5 p-5">Aucun jeu.</p>}
+      </div>
+    </section>
+
+    <!-- ── Section : Questions d'un jeu ───────────────────────────────────── -->
+    <section id="section-jeu-questions" class="admin-section hidden">
+      <!-- Header avec retour -->
+      <div class="flex items-center gap-3 mb-6">
+        <button data-action="back-to-jeux" class="h-9 px-3.5 bg-white border border-zinc-300 text-zinc-600 text-3.25 font-semibold cursor-pointer rounded-lg flex items-center gap-1.5"><Image src={arrowLeftIcon} alt="" width={14} height={14} style="filter:invert(35%) sepia(0%) saturate(0%) brightness(60%) contrast(90%)" /> Retour</button>
+        <div>
+          <h3 id="jeu-questions-title" class="text-zinc-900 m-0 mb-0.5"></h3>
+          <p id="jeu-questions-count" class="text-zinc-400 text-3.5 font-medium m-0"></p>
+        </div>
+      </div>
+
+      <!-- Liste des questions -->
+      <div id="questions-list" class="bg-white rounded-xl border border-gray-200 shadow-sm mb-6 overflow-hidden"></div>
+
+      <!-- Formulaire ajout question -->
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <p class="text-3.25 font-bold uppercase tracking-wider text-zinc-400 m-0 mb-5 pb-3 border-b border-gray-100">Ajouter une question</p>
+
+        <div id="add-question-error" class="hidden bg-red-50 rounded-lg px-3.5 py-2.5 text-red-500 text-3.25 font-medium mb-4"></div>
+
+        <div class="mb-4">
+          <label class="text-3 font-bold text-zinc-700 block mb-1.5">Question *</label>
+          <input id="q-question" type="text" placeholder="ex : Quelle est la capitale de la France ?" class="w-full bg-gray-50 border-[1.5px] border-gray-200 rounded-lg px-3.5 py-2.5 text-zinc-900 text-3.5 outline-none box-border" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          {[1,2,3,4].map(n => (
+            <div>
+              <label class="text-3 font-bold text-zinc-700 block mb-1.5">Choix {n}</label>
+              <input id={`q-choix-${n}`} type="text" placeholder={`Réponse ${n}`} class="w-full bg-gray-50 border-[1.5px] border-gray-200 rounded-lg px-3.5 py-2.5 text-zinc-900 text-3.5 outline-none box-border" />
+            </div>
+          ))}
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-5">
+          <div>
+            <label class="text-3 font-bold text-zinc-700 block mb-1.5">Bonne réponse *</label>
+            <select id="q-reponse" class="w-full bg-gray-50 border-[1.5px] border-gray-200 rounded-lg px-3.5 py-2.5 text-zinc-900 text-3.5 outline-none box-border">
+              <option value="1">Choix 1</option>
+              <option value="2">Choix 2</option>
+              <option value="3">Choix 3</option>
+              <option value="4">Choix 4</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-3 font-bold text-zinc-700 block mb-1.5">Thème *</label>
+            <select id="q-theme" class="w-full bg-gray-50 border-[1.5px] border-gray-200 rounded-lg px-3.5 py-2.5 text-zinc-900 text-3.5 outline-none box-border">
+              <option value="cultrue_g">Culture générale</option>
+              <option value="jeux_video">Jeux vidéo</option>
+              <option value="histoire">Histoire</option>
+            </select>
+          </div>
+        </div>
+
+        <button id="btn-add-question" class="h-10.5 px-6 bg-primary-600 border-0 text-white text-3.5 font-bold cursor-pointer rounded-lg">Ajouter la question</button>
+      </div>
+    </section>
+
+    <!-- ── Section : Boissons ─────────────────────────────────────────────── -->
+    <section id="section-boisons" class="admin-section hidden">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h3 class="text-zinc-900 m-0 mb-1">Boissons</h3>
+          <p class="text-zinc-400 text-3.5 font-medium m-0">{allBoisons.length} boisson{allBoisons.length > 1 ? 's' : ''} dans la base</p>
+        </div>
+        <button data-action="open-boison-form" data-id="" class="h-9.5 px-4.5 bg-primary-600 border-0 text-white text-3.25 font-bold cursor-pointer rounded-lg hover:bg-primary-900 transition-colors">+ Ajouter une boisson</button>
+      </div>
+
+      <div class="admin-table-wrap bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="grid grid-cols-[1fr_100px] px-5 py-3 bg-gray-50 border-b border-gray-200">
+          <p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">Nom</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0"></p>
+        </div>
+        {allBoisons.map(b => (
+          <div data-row-boison={b.id} class="grid grid-cols-[1fr_100px] items-center px-5 py-3.5 border-b border-gray-100">
+            <p class="text-3.5 font-semibold text-zinc-900 m-0">{b.nom ?? b.name ?? '—'}</p>
+            <div class="flex justify-end gap-2">
+              <button data-action="open-boison-form" data-id={b.id} class="h-7 px-3 bg-green-50 border border-green-100 text-primary-600 text-3 font-semibold cursor-pointer rounded-md hover:bg-green-100 transition-colors">Modifier</button>
+              <button data-action="delete-boison" data-id={b.id} class="h-7 px-3 bg-red-50 border border-red-200 text-red-500 text-3 font-semibold cursor-pointer rounded-md hover:bg-red-100 transition-colors">Supp.</button>
+            </div>
+          </div>
+        ))}
+        {allBoisons.length === 0 && <p class="text-zinc-300 text-3.5 p-5">Aucune boisson.</p>}
+      </div>
+    </section>
+
+    <!-- ── Section : Boutique ────────────────────────────────────────────── -->
+    <section id="section-boutique" class="admin-section hidden">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h3 class="text-zinc-900 m-0 mb-1">Boutique</h3>
+          <p class="text-zinc-400 text-3.5 font-medium m-0">{allBoutique.length} article{allBoutique.length > 1 ? 's' : ''} disponible{allBoutique.length > 1 ? 's' : ''}</p>
+        </div>
+        <button data-action="open-boutique-form" data-id="" class="h-9.5 px-4.5 bg-primary-600 border-0 text-white text-3.25 font-bold cursor-pointer rounded-lg hover:bg-primary-900 transition-colors">+ Ajouter un article</button>
+      </div>
+
+      <div class="admin-table-wrap bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="grid grid-cols-[56px_1fr_160px_110px_130px] px-5 py-3 bg-gray-50 border-b border-gray-200">
+          <p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0"></p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">Nom</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">Type</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0">Prix</p><p class="text-2.75 font-bold uppercase tracking-wider text-zinc-400 m-0"></p>
+        </div>
+        {allBoutique.map(b => {
+          const typeLabels = { decoration_avatar: 'Décoration', theme: 'Thème', titre: 'Titre' };
+          const typeColors = { decoration_avatar: ['#7c3aed','#f5f3ff'], theme: ['#0891b2','#ecfeff'], titre: ['#d97706','#fffbeb'] };
+          const [color, bg] = typeColors[b.type] ?? ['#888','#f9fafb'];
+          const imgFile = b.type === 'decoration_avatar' ? b.type_decoration_avatar :
+                          b.type === 'theme'             ? b.type_them              : null;
+          const imgSrc = imgFile
+            ? `${PB_URL}/api/files/${b.collectionName}/${b.id}/${imgFile}`
+            : null;
+          return (
+            <div data-row-boutique={b.id} class="grid grid-cols-[56px_1fr_160px_110px_130px] items-center px-5 py-3 border-b border-gray-100">
+              <!-- Aperçu image -->
+              <div class="w-10 h-10 rounded-md overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
+                {imgSrc ? (
+                  <img src={imgSrc} alt="" class="w-full h-full object-cover" />
+                ) : b.type === 'titre' ? (
+                  <span class="text-2.5 font-bold text-zinc-400">T</span>
+                ) : (
+                  <span class="text-4">🖼</span>
+                )}
+              </div>
+              <!-- Nom -->
+              <div>
+                <p class="text-3.5 font-semibold text-zinc-900 m-0">{b.nom}</p>
+                {b.type === 'titre' && b.type_titre && (
+                  <p class="text-2.75 text-zinc-400 m-0">"{b.type_titre}"</p>
+                )}
+              </div>
+              <!-- Type badge -->
+              <span style={`font-size:11px; font-weight:700; color:${color}; background:${bg}; padding:3px 10px; border-radius:20px; width:fit-content;`}>
+                {typeLabels[b.type] ?? b.type}
+              </span>
+              <!-- Prix -->
+              <p class="text-3.25 font-bold text-zinc-900 m-0">{b.prix} pts</p>
+              <!-- Actions -->
+              <div class="flex justify-end gap-2">
+                <button data-action="open-boutique-form" data-id={b.id} class="h-7 px-3 bg-green-50 border border-green-100 text-primary-600 text-3 font-semibold cursor-pointer rounded-md hover:bg-green-100 transition-colors">Modifier</button>
+                <button data-action="delete-boutique" data-id={b.id} class="h-7 px-3 bg-red-50 border border-red-200 text-red-500 text-3 font-semibold cursor-pointer rounded-md hover:bg-red-100 transition-colors">Supp.</button>
+              </div>
+            </div>
+          );
+        })}
+        {allBoutique.length === 0 && <p class="text-zinc-300 text-3.5 p-5">Aucun article.</p>}
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- CONFIRM MODAL                                                             -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div id="confirm-modal" class="hidden fixed inset-0 bg-black/45 z-60 items-center justify-center">
+  <div class="bg-white w-[min(420px,92vw)] rounded-xl overflow-hidden shadow-2xl">
+    <div class="px-7 py-6 border-b border-gray-100">
+      <p class="text-2.75 font-bold uppercase tracking-widest text-red-500 m-0 mb-1">Action irréversible</p>
+      <h3 id="confirm-title" class="text-zinc-900 m-0 text-5"></h3>
+    </div>
+    <div class="px-7 py-5">
+      <p id="confirm-body" class="text-zinc-600 text-3.5 font-medium m-0 leading-relaxed"></p>
+    </div>
+    <div class="flex gap-2.5 px-7 pb-6 justify-end">
+      <button id="confirm-cancel" class="h-9.5 px-5 bg-white border border-zinc-300 text-zinc-600 text-3.25 font-semibold cursor-pointer rounded-lg">Annuler</button>
+      <button id="confirm-ok" class="h-9.5 px-5 bg-red-500 border-0 text-white text-3.25 font-semibold cursor-pointer rounded-lg">Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- DRAWER                                                                    -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div id="drawer-overlay" class="hidden fixed inset-0 bg-black/30 z-70"></div>
+<div id="drawer" class="fixed top-0 right-0 h-full w-[min(500px,100vw)] bg-white z-80 overflow-y-auto flex flex-col shadow-[-8px_0_40px_rgba(0,0,0,0.12)]" style="transform:translateX(100%); transition:transform 0.3s cubic-bezier(.4,0,.2,1);">
+
+  <!-- Header -->
+  <div class="flex justify-between items-center px-7 py-6 border-b border-gray-100 shrink-0">
+    <div>
+      <p id="drawer-label" class="text-2.75 font-bold uppercase tracking-widest text-primary-600 m-0 mb-0.75"></p>
+      <h3 id="drawer-title" class="text-zinc-900 m-0 text-5"></h3>
+    </div>
+    <button id="drawer-close" class="bg-zinc-100 border-0 text-zinc-600 text-5 leading-none cursor-pointer w-8.5 h-8.5 rounded-lg flex items-center justify-center">×</button>
+  </div>
+
+  <!-- Body -->
+  <div id="drawer-body" class="flex-1 p-7"></div>
+
+  <!-- Footer -->
+  <div class="px-7 py-5 border-t border-gray-100 shrink-0">
+    <p id="drawer-error" class="text-red-500 text-3.25 font-medium mb-3 hidden bg-red-50 py-2.5 px-3.5 rounded-lg"></p>
+    <button id="drawer-submit" class="w-full h-11 bg-primary-600 border-0 text-white text-3.5 font-bold cursor-pointer rounded-lg tracking-[0.3px]">Enregistrer</button>
+  </div>
+</div>
+
+<script is:inline id="page-data" type="application/json" set:html={pageData}></script>
+<script>
+import '../js/admin.js';
+</script>
+
+<script is:inline src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script define:vars={{ chartData }}>
+  function buildDonut(labels, data, colors) {
+    return {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{
+          data,
+          backgroundColor: colors,
+          borderWidth: 3,
+          borderColor: '#ffffff',
+          hoverBorderColor: '#ffffff',
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        cutout: '62%',
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              font: { size: 11, family: 'Inter, sans-serif' },
+              color: '#646262',
+              padding: 14,
+              boxWidth: 10,
+              boxHeight: 10,
+              usePointStyle: true,
+              pointStyle: 'circle',
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) {
+                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                const pct   = total ? Math.round(ctx.parsed / total * 100) : 0;
+                return ' ' + ctx.label + ' : ' + ctx.parsed + ' (' + pct + '%)';
+              }
+            }
+          }
+        }
+      }
+    };
+  }
+
+  new Chart(
+    document.getElementById('chart-abonnements'),
+    buildDonut(chartData.abonnements.labels, chartData.abonnements.data, ['#d1d5db', '#7c3aed', '#0891b2'])
+  );
+
+  new Chart(
+    document.getElementById('chart-sessions'),
+    buildDonut(chartData.sessions.labels, chartData.sessions.data, ['#fbbf24', '#22c55e', '#9ca3af'])
+  );
+
+  if (chartData.jeux.labels.length > 0) {
+    const palette = ['#72c073', '#7c3aed', '#0891b2', '#d97706', '#ef4444', '#ec4899', '#14b8a6'];
+    new Chart(
+      document.getElementById('chart-jeux'),
+      buildDonut(chartData.jeux.labels, chartData.jeux.data, palette.slice(0, chartData.jeux.labels.length))
+    );
+  }
+</script>
+
+
+</Layout>

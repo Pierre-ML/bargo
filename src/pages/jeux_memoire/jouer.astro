@@ -1,0 +1,244 @@
+---
+// @ts-nocheck
+import Layout from '../../layouts/Layout.astro';
+import { Image } from 'astro:assets';
+import { getCollection, getImageUrl, PB_URL } from '../../../backend/backend.js';
+import heartFill from '../../assets/icon/like_fill.svg';
+import '../../styles/memory-game.css';
+
+const token  = Astro.cookies.get('pb_token')?.value ?? '';
+const userId = Astro.cookies.get('pb_user_id')?.value ?? '';
+if (!token || !userId) return Astro.redirect('/connexion');
+
+const sessionId = Astro.url.searchParams.get('session') ?? '';
+const inSession = !!(sessionId && token && userId);
+
+let nbCards   = Math.max(4, parseInt(Astro.url.searchParams.get('cards') ?? '16'));
+if (nbCards % 2 !== 0) nbCards++;
+const totalTime = Math.max(0, parseInt(Astro.url.searchParams.get('time') ?? '0'));
+
+// Multiplicateur selon le temps choisi
+const multiplier = totalTime <= 0 ? 1 : totalTime <= 60 ? 3 : totalTime <= 120 ? 2 : 1.5;
+const ptsPerPair = Math.round(10 * multiplier);
+
+// Fetch boissons
+const boissons = await getCollection('boison', { sort: '@random', perPage: 50 });
+
+const nbPairs    = Math.min(Math.floor(nbCards / 2), boissons.length);
+if (nbPairs < 2) return Astro.redirect('/jeux_memoire');
+
+const nbCardsActual = nbPairs * 2;
+const maxLives      = nbPairs + 2;
+
+// Choisir nbPairs boissons uniques (déjà triées aléatoirement)
+const selected = boissons.slice(0, nbPairs);
+
+// Construire le deck : chaque boisson apparaît 2 fois
+const deck = [];
+for (const b of selected) {
+  const imgUrl = b.img ? getImageUrl(b, b.img) : null;
+  deck.push({ boissonId: b.id, nom: b.nom ?? '?', imgUrl });
+  deck.push({ boissonId: b.id, nom: b.nom ?? '?', imgUrl });
+}
+
+// Mélanger (Fisher-Yates)
+for (let i = deck.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [deck[i], deck[j]] = [deck[j], deck[i]];
+}
+
+// Formater le temps initial (MM:SS si >= 60s)
+function fmtTime(s) {
+  if (s < 60) return s + 's';
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+const timeDisplay = totalTime > 0 ? fmtTime(totalTime) : null;
+---
+
+<Layout title="Memory Shot — Bargo" noFooter={true}>
+
+  <main class="h-screen bg-neutral-800 flex flex-col overflow-hidden">
+
+    <!-- Barre timer (top) -->
+    {totalTime > 0 && (
+      <div class="w-full h-1.5 bg-zinc-700 shrink-0">
+        <div id="timer-bar" class="h-full" style="width:100%; background:#72C073;"></div>
+      </div>
+    )}
+
+    <!-- Top bar MOBILE ───────────────────────────────────────── -->
+    <div class="flex lg:hidden items-center justify-between px-4 py-2 bg-zinc-800 border-b border-white/8 shrink-0 gap-3">
+
+      <!-- Vies -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        <Image src={heartFill} alt="" width={14} height={14} />
+        <span id="lives-count" class="text-white font-bold text-4 tabular-nums">{maxLives}</span>
+        <span class="text-neutral-500 text-3">/{maxLives}</span>
+      </div>
+
+      <!-- Multiplicateur (centre) -->
+      {multiplier > 1 ? (
+        <span class="px-2 py-0.5 bg-primary-900 text-primary-500 text-2.5 font-bold rounded-full uppercase tracking-widest shrink-0">
+          ×{multiplier}
+        </span>
+      ) : (
+        <span class="flex-1"></span>
+      )}
+
+      <!-- Paires + Timer -->
+      <div class="flex items-center gap-3 shrink-0">
+        <div class="flex items-baseline gap-1">
+          <span id="pairs-count" class="text-primary-500 font-bold text-4 tabular-nums">0</span>
+          <span class="text-neutral-500 text-3">/{nbPairs}</span>
+        </div>
+        {totalTime > 0 && (
+          <span id="timer-text" class="font-bold text-4 tabular-nums" style="color:#72C073">{timeDisplay}</span>
+        )}
+      </div>
+
+    </div>
+
+    <!-- Top bar DESKTOP ──────────────────────────────────────── -->
+    <div class="hidden lg:flex items-center justify-between px-10 py-4 bg-zinc-800 border-b border-white/8 shrink-0">
+
+      <!-- Paires -->
+      <div class="flex flex-col items-start min-w-16">
+        <span class="text-neutral-400 text-2.75 font-medium uppercase tracking-widest leading-none mb-0.5">Paires</span>
+        <div class="flex items-baseline gap-1">
+          <span id="pairs-count-lg" class="text-primary-500 font-bold text-5.5 tabular-nums leading-none">0</span>
+          <span class="text-neutral-500 text-3.5">/ {nbPairs}</span>
+        </div>
+      </div>
+
+      <!-- Centre : vies + multiplicateur -->
+      <div class="flex flex-col items-center gap-1.5">
+        <div class="flex items-center gap-1.5">
+          <Image src={heartFill} alt="" width={18} height={18} />
+          <span id="lives-count-lg" class="text-white font-bold text-5 tabular-nums">{maxLives}</span>
+          <span class="text-neutral-500 text-3.5">/ {maxLives}</span>
+        </div>
+        {multiplier > 1 && (
+          <span class="px-2 py-0.5 bg-primary-900 text-primary-500 text-2.75 font-bold rounded-full uppercase tracking-widest">
+            ×{multiplier} — {ptsPerPair} pts/paire
+          </span>
+        )}
+        {multiplier === 1 && (
+          <span class="text-neutral-600 text-2.75 font-medium">{ptsPerPair} pts/paire</span>
+        )}
+      </div>
+
+      <!-- Timer -->
+      {totalTime > 0 ? (
+        <div class="flex flex-col items-end min-w-16">
+          <span class="text-neutral-400 text-2.75 font-medium uppercase tracking-widest leading-none mb-0.5">Temps</span>
+          <span id="timer-text-lg" class="font-bold text-5.5 tabular-nums leading-none" style="color:#72C073">{timeDisplay}</span>
+        </div>
+      ) : (
+        <div class="min-w-16"></div>
+      )}
+
+    </div>
+
+    <!-- Grille de cartes ──────────────────────────────────────── -->
+    <div class="flex-1 min-h-0 px-3 lg:px-8 py-3 lg:py-4">
+      <div class="max-w-4xl mx-auto h-full">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-3 h-full" style="grid-auto-rows: 1fr;">
+          {deck.map((card, idx) => (
+            <div
+              class="memory-card min-h-0 cursor-pointer select-none"
+              data-idx={String(idx)}
+              data-boisson-id={card.boissonId}
+            >
+              <div class="memory-card-inner w-full h-full">
+
+                <!-- Dos de la carte -->
+                <div class="memory-card-back card-back-pattern bg-primary-900 rounded-1 overflow-hidden relative flex items-center justify-center">
+                  <div class="absolute inset-2.5 rounded border border-white/10 pointer-events-none"></div>
+                  <span class="relative text-white font-black select-none" style="font-size:2.75rem; opacity:0.18; letter-spacing:-0.04em;">B</span>
+                </div>
+
+                <!-- Face de la carte -->
+                <div class="memory-card-front rounded-1 overflow-hidden relative bg-zinc-800">
+                  {card.imgUrl ? (
+                    <img src={card.imgUrl} alt={card.nom} class="absolute inset-0 w-full h-full object-cover" />
+                  ) : (
+                    <div class="absolute inset-0 flex items-center justify-center p-3">
+                      <p class="text-white text-4 font-bold text-center m-0 leading-snug">{card.nom}</p>
+                    </div>
+                  )}
+                  <div class="absolute bottom-0 left-0 right-0 bg-linear-to-t from-neutral-900 to-transparent pt-4 pb-1.5 px-2">
+                    <p class="text-white text-3 font-semibold text-center m-0 truncate">{card.nom}</p>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    <!-- Overlay résultat ─────────────────────────────────────── -->
+    <div id="result-overlay" class="hidden fixed inset-0 bg-neutral-800/95 z-50">
+      <div class="flex items-center justify-center w-full h-full px-4">
+        <div class="w-full max-w-lg">
+
+          <div class="bg-zinc-800 border border-neutral-700 rounded-1 p-8 lg:p-10 mb-6 text-center">
+            <div class="flex items-center justify-center gap-6 mb-6">
+              <div id="result-circle" class="w-28 h-28 rounded-full flex flex-col items-center justify-center shrink-0" style="background: conic-gradient(#72C073 0deg, #72C073 calc(var(--pct,0) * 360deg), #333 calc(var(--pct,0) * 360deg)); padding: 4px;">
+                <div class="w-full h-full rounded-full bg-zinc-800 flex flex-col items-center justify-center">
+                  <span id="result-correct" class="text-white font-bold text-8 leading-none"></span>
+                  <span class="text-neutral-300 text-3 font-medium opacity-60">/ {nbPairs}</span>
+                </div>
+              </div>
+              <div class="text-left">
+                <h2 id="result-title" class="text-white m-0 mb-1 text-5.5">Résultat</h2>
+                <p id="result-score" class="text-primary-500 text-7 font-bold m-0"></p>
+                <p id="result-sub" class="text-neutral-300 text-3 font-medium opacity-50 m-0 mt-1"></p>
+              </div>
+            </div>
+            <div class="w-full h-2 bg-zinc-700 rounded-full overflow-hidden">
+              <div id="result-bar" class="h-full rounded-full transition-[width] duration-700" style="width:0%; background:#72C073;"></div>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-3">
+            <a href={`/jeux_memoire/jouer?cards=${nbCardsActual}&time=${totalTime}${sessionId ? '&session=' + sessionId : ''}`}
+              class="h-12 bg-primary-600 text-white text-4 font-medium flex items-center justify-center no-underline hover:opacity-90 transition-opacity rounded-0.5">
+              Rejouer
+            </a>
+            <div class="flex flex-col lg:flex-row gap-3">
+              <a href={`/jeux_memoire${sessionId ? '?session=' + sessionId : ''}`}
+                class="lg:flex-1 h-12 bg-zinc-800 border border-zinc-700 text-white text-4 font-medium flex items-center justify-center no-underline hover:opacity-80 transition-opacity rounded-0.5">
+                Changer les paramètres
+              </a>
+              <a href="/jeux"
+                class="lg:flex-1 h-12 bg-transparent border border-zinc-700 text-neutral-300 text-4 font-medium flex items-center justify-center no-underline hover:opacity-80 transition-opacity rounded-0.5">
+                Retour aux jeux
+              </a>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <div id="memory-meta" hidden
+    data-total-time={String(totalTime)}
+    data-nb-pairs={String(nbPairs)}
+    data-max-lives={String(maxLives)}
+    data-multiplier={String(multiplier)}
+    data-pts-per-pair={String(ptsPerPair)}
+    data-pb-url={PB_URL}
+    data-token={token}
+    data-user-id={userId}
+    data-in-session={String(inSession)}
+  ></div>
+
+  <script>
+    import '../../js/memory-game.js';
+  </script>
+
+</Layout>

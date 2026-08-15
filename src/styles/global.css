@@ -1,0 +1,92 @@
+@import "tailwindcss";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/manrope/500.css";
+@import "@fontsource/manrope/700.css";
+
+@theme {
+  --font-manrope: 'Manrope', sans-serif;
+  --font-inter: 'Inter', sans-serif;
+
+  --color-primary-900: #094736;
+  --color-primary-600: #347645;
+  --color-primary-550: #5aad5b;
+  --color-primary-500: #72c073;
+  --color-neutral-800: #1e1e1e;
+  --color-neutral-500: #646262;
+  --color-neutral-350: #e7e5e5;
+  --color-neutral-300: #dfdfdf;
+  --color-neutral-200: #f7f1ed;
+}
+
+@layer base {
+  /* Base — Inter Medium 16px */
+  body {
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 16px;
+    line-height: 1.4;
+    overflow-x: clip;
+  }
+
+  /* H1 — mobile 35px / desktop 90px */
+  h1 {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+    font-size: 35px;
+    line-height: 1;
+    letter-spacing: 2.1px;
+  }
+
+  /* H2 — mobile 26px / desktop 50px */
+  h2 {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+    font-size: 26px;
+    line-height: 1;
+    letter-spacing: 1.56px;
+  }
+
+  /* H3 — mobile 18px / desktop 25px */
+  h3 {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 500;
+    font-size: 18px;
+    line-height: 1.4;
+    letter-spacing: -1px;
+  }
+
+  @media (min-width: 1024px) {
+    h1 { font-size: 90px; letter-spacing: 5.4px; }
+    h2 { font-size: 50px; letter-spacing: 3px; }
+    h3 { font-size: 25px; }
+  }
+}
+
+@layer utilities {
+  /* sm — Inter Medium 14px */
+  .text-sm {
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.1;
+  }
+}
+
+/* Carousel bars — transition swipe */
+#bar-track {
+  transition: transform 0.5s ease-in-out;
+}
+
+/* FAQ — rotation de l'icône + quand ouvert */
+.faq-item[open] .faq-icon {
+  transform: rotate(45deg);
+}
+
+/* Inscription — checkbox conditions d'utilisation */
+#terms-checkbox:checked + div svg {
+  display: block;
+}
+#terms-checkbox:checked + div {
+  background-color: #347645;
+  border-color: #347645;
+}

@@ -1,0 +1,254 @@
+---
+// @ts-nocheck
+import Layout from '../../layouts/Layout.astro';
+import PbImage from '../../components/PbImage.astro';
+import HeroSection from '../../components/HeroSection.astro';
+import { Image } from 'astro:assets';
+import { PB_URL } from '../../../backend/backend.js';
+import homeIcon       from '../../assets/icon/home.svg';
+import usersGroupIcon  from '../../assets/icon/users_group.svg';
+import chevronRightIcon from '../../assets/icon/chevron_right.svg';
+import checkIcon        from '../../assets/icon/check.svg';
+import arrowLeftIcon    from '../../assets/icon/arrow_left_lg.svg';
+
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+if (!token || !userId) return Astro.redirect('/connexion');
+
+// Fetch user's active sessions with bars expanded for images
+const filter = encodeURIComponent(`(id_hote='${userId}'||id_menbre~'${userId}')&&etat_session!='fini'`);
+const res = await fetch(
+  `${PB_URL}/api/collections/session_barathon/records?filter=${filter}&sort=-created&perPage=50&expand=id_bar,id_menbre`,
+  { headers: { Authorization: `Bearer ${token}` } }
+);
+const data = res.ok ? await res.json() : { items: [] };
+
+const sessions = (data.items ?? []).map(s => {
+  const barsRaw = s.expand?.id_bar ?? [];
+  const bars    = Array.isArray(barsRaw) ? barsRaw : [barsRaw];
+  const firstBar = bars[0] ?? null;
+  const invites  = s.expand?.id_menbre ?? [];
+  return {
+    id:        s.id,
+    nom:       s.nom ?? 'Session sans nom',
+    date:      s.date_heur_depart?.split(' ')[0] ?? '',
+    heure:     s.date_heur_depart?.split(' ')[1]?.substring(0, 5) ?? '',
+    etat:      s.etat_session ?? 'pas_commencer',
+    isHote:    s.id_hote === userId,
+    barCount:  bars.filter(Boolean).length,
+    memberCount: (Array.isArray(invites) ? invites.length : 0),
+    firstBar:  firstBar ? {
+      id:             firstBar.id,
+      collectionName: firstBar.collectionName,
+      img:            firstBar.img?.[0] ?? null,
+      nom:            firstBar.nom ?? '',
+    } : null,
+  };
+});
+---
+
+<Layout title="Mes sessions — Bargo">
+
+  <HeroSection title="Barathons" descMobile="Planifiez votre tournée des bars, invitez vos amis et jouez ensemble tout au long de la soirée." overflow>
+    Planifiez votre tournée des bars, invitez vos amis et jouez ensemble tout au long de la soirée.
+    Créez un barathon ou rejoignez une session déjà en cours.
+  </HeroSection>
+
+  <!-- ===== CONTENU ===== -->
+  <div class="bg-neutral-200 px-4 lg:px-20 py-10 lg:py-20">
+    <div class="max-w-360 mx-auto">
+
+      <div class="flex flex-col lg:flex-row gap-10 lg:gap-20">
+
+        <!-- ── Colonne gauche : comment ça marche ── -->
+        <div class="lg:w-105 lg:shrink-0">
+
+          <h2 class="m-0 mb-6 text-black">Comment ça marche</h2>
+
+          <div class="flex flex-col gap-5 mb-8">
+            {[
+              { n: '1', titre: 'Créez votre barathon', txt: 'Donnez un nom à votre soirée, choisissez la date et l\'heure de départ.' },
+              { n: '2', titre: 'Choisissez vos bars', txt: 'Sélectionnez les bars que vous voulez visiter et l\'ordre de passage.' },
+              { n: '3', titre: 'Invitez vos amis', txt: 'Ajoutez vos amis à la session. Désignez un SAM parmi le groupe.' },
+              { n: '4', titre: 'Lancez et jouez', txt: 'Pendant la soirée, naviguez de bar en bar et jouez à des jeux ensemble.' },
+            ].map(step => (
+              <div class="flex gap-4 items-start">
+                <span class="w-8 h-8 rounded-full bg-primary-900 text-white flex items-center justify-center text-4 font-bold shrink-0">{step.n}</span>
+                <div>
+                  <p class="m-0 text-black text-4 font-bold leading-snug">{step.titre}</p>
+                  <p class="m-0 mt-1 text-neutral-500 text-3.5 font-medium leading-normal">{step.txt}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <!-- Points gagnables -->
+          <div class="bg-neutral-800 rounded-0.5 p-6">
+            <h3 class="text-white m-0 mb-1">Points à gagner</h3>
+            <p class="m-0 mb-4 text-neutral-300 text-3.5 font-medium opacity-70">En plus des points des jeux, la session elle-même rapporte des bonus.</p>
+            <div class="flex flex-col gap-2">
+              {[
+                { label: 'Par bar visité',   pts: '+5 pts'  },
+                { label: 'Bonus SAM',        pts: '+50 pts' },
+                { label: 'Bonus Hôte',       pts: '+30 pts' },
+              ].map(row => (
+                <div class="flex items-center justify-between gap-4">
+                  <p class="m-0 text-neutral-200 text-3.5 font-medium">{row.label}</p>
+                  <span class="text-primary-500 text-4 font-bold shrink-0">{row.pts}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ── Colonne droite : bouton + liste ── -->
+        <div class="flex-1 min-w-0">
+
+          <!-- Bouton créer -->
+          <a href="/session/creer"
+            class="flex items-center justify-center w-full lg:w-auto lg:inline-flex h-14 px-12 bg-neutral-800 text-white text-4 font-medium no-underline hover:bg-primary-900 active:scale-[0.97] transition-all mb-10">
+            + Créer un barathon
+          </a>
+
+          <!-- Liste des sessions -->
+          {sessions.length === 0 ? (
+            <div class="bg-white rounded-0.5 shadow-sm px-6 py-10 text-center">
+              <p class="text-neutral-500 text-4 font-medium m-0">Vous n'avez aucune session active pour le moment.</p>
+              <p class="text-neutral-500 text-3.5 font-medium m-0 mt-2 opacity-70">Créez votre premier barathon pour commencer !</p>
+            </div>
+          ) : (
+            <div class="flex flex-col gap-4">
+              {sessions.map(s => {
+                const etatLabel = s.etat === 'en_cours' ? 'En cours' : 'En attente';
+                const etatBg    = s.etat === 'en_cours' ? 'background:#72C073;color:#094736;' : 'background:#DFDFDF;color:#646262;';
+                return (
+                  <a href={`/session/${s.id}`}
+                    class="bg-white rounded-0.5 shadow-sm overflow-hidden flex no-underline hover:shadow-lg transition-shadow">
+
+                    <!-- Image (premier bar ou placeholder) -->
+                    <div class="w-28 lg:w-44 shrink-0 overflow-hidden" style="background:#2c2c2c;">
+                      {s.firstBar?.img ? (
+                        <PbImage
+                          record={s.firstBar}
+                          recordImage={s.firstBar.img}
+                          width={176} height={160}
+                          class="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div class="w-full h-full flex items-center justify-center session-bar-placeholder">
+                          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                        </div>
+                      )}
+                    </div>
+
+                    <!-- Contenu -->
+                    <div class="flex-1 min-w-0 px-5 py-4 flex flex-col justify-between">
+                      <div>
+                        <!-- Badges -->
+                        <div class="flex items-center gap-2 mb-2 flex-wrap">
+                          <span class="text-2.5 font-bold px-2 py-0.5 rounded-full" style={etatBg}>{etatLabel}</span>
+                          {s.isHote && (
+                            <span class="text-2.5 font-bold px-2 py-0.5 rounded-full" style="background:rgba(9,71,54,0.1);color:#094736;">Hôte</span>
+                          )}
+                        </div>
+                        <!-- Nom -->
+                        <h3 class="m-0 text-black truncate">{s.nom}</h3>
+                        <!-- Date -->
+                        {(s.date || s.heure) && (
+                          <p class="m-0 mt-1 text-neutral-500 text-3.5 font-medium">
+                            {s.date}{s.date && s.heure ? ' · ' : ''}{s.heure}
+                          </p>
+                        )}
+                      </div>
+                      <!-- Infos bas -->
+                      <div class="flex items-center gap-4 mt-3">
+                        {s.barCount > 0 && (
+                          <div class="flex items-center gap-1.5">
+                            <Image src={homeIcon} alt="" width={14} height={14} style="filter:invert(41%) sepia(6%) saturate(228%) hue-rotate(314deg) brightness(95%) contrast(88%)" />
+                            <span class="text-neutral-500 text-3 font-medium">{s.barCount} bar{s.barCount > 1 ? 's' : ''}</span>
+                          </div>
+                        )}
+                        {s.memberCount > 0 && (
+                          <div class="flex items-center gap-1.5">
+                            <Image src={usersGroupIcon} alt="" width={14} height={14} style="filter:invert(41%) sepia(6%) saturate(228%) hue-rotate(314deg) brightness(95%) contrast(88%)" />
+                            <span class="text-neutral-500 text-3 font-medium">{s.memberCount} invité{s.memberCount > 1 ? 's' : ''}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <!-- Flèche -->
+                    <div class="flex items-center pr-5 shrink-0">
+                      <Image src={chevronRightIcon} alt="" width={20} height={20} style="filter:invert(95%) sepia(5%) saturate(200%) hue-rotate(314deg) brightness(110%) contrast(85%)" />
+                    </div>
+
+                  </a>
+                );
+              })}
+            </div>
+          )}
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===== POPUP VÉRIFICATION ÂGE ===== -->
+  <div id="age-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;">
+    <div style="background:white;border-radius:10px;width:100%;max-width:420px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.3);">
+
+      <!-- Header -->
+      <div style="background:#094736;padding:24px 28px;">
+        <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:3px;color:#72c073;margin:0 0 8px 0;">Vérification</p>
+        <h3 style="color:white;margin:0;font-size:22px;font-weight:500;letter-spacing:-0.5px;">Confirmation d'âge</h3>
+      </div>
+
+      <!-- Corps -->
+      <div style="padding:28px;">
+        <p style="color:#646262;font-size:14px;font-weight:500;line-height:1.6;margin:0 0 24px 0;">
+          Les barathons impliquent la consommation de boissons alcoolisées. L'accès est strictement réservé aux personnes majeures.
+        </p>
+
+        <!-- Checkbox -->
+        <label style="display:flex;align-items:flex-start;gap:14px;cursor:pointer;">
+          <div style="position:relative;width:22px;height:22px;flex-shrink:0;margin-top:1px;">
+            <input type="checkbox" id="age-checkbox"
+              style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;" />
+            <div id="age-box" style="width:22px;height:22px;border:2px solid #DFDFDF;border-radius:4px;background:white;transition:all 0.15s;display:flex;align-items:center;justify-content:center;">
+              <Image src={checkIcon} alt="" width={13} height={13} id="age-check-icon" class="brightness-0 invert" style="display:none;" />
+            </div>
+          </div>
+          <span style="color:#1e1e1e;font-size:14px;font-weight:600;line-height:1.5;">Je certifie avoir <strong>18 ans ou plus</strong> et accepte de participer à un événement impliquant de l'alcool.</span>
+        </label>
+
+      </div>
+
+      <!-- Footer -->
+      <div style="padding:0 28px 28px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <a href="/" style="color:#646262;font-size:14px;font-weight:500;text-decoration:none;border:none;background:transparent;cursor:pointer;padding:0;" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">
+          <Image src={arrowLeftIcon} alt="" width={16} height={16} class="inline-block align-middle mr-1" style="filter:invert(41%) sepia(6%) saturate(228%) hue-rotate(314deg) brightness(95%) contrast(88%)" /> Retour
+        </a>
+        <button id="age-confirm-btn"
+          onclick="window.confirmAge()"
+          style="height:46px;padding:0 28px;font-size:14px;font-weight:600;color:white;border:none;cursor:not-allowed;border-radius:4px;background:#DFDFDF;transition:all 0.2s;"
+          disabled>
+          Confirmer
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+</Layout>
+
+<script>
+  import '../../js/age-verification.js';
+</script>
+
+<style>
+  .session-bar-placeholder {
+    background: linear-gradient(135deg, #094736, #347645);
+  }
+</style>

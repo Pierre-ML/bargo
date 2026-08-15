@@ -1,0 +1,16 @@
+---
+import { Image } from 'astro:assets';
+import likeIcon     from '../assets/icon/like.svg';
+import likeFillIcon from '../assets/icon/like_fill.svg';
+
+const { id, liked = false, variant = 'bar', class: className = '', ariaLabel = 'Favori' } = Astro.props;
+---
+
+<button
+  class:list={[`like-btn-${variant}`, className]}
+  data-id={id}
+  type="button"
+  aria-label={ariaLabel}>
+  <Image src={likeIcon}     alt="" class={`like-empty size-6 ${liked ? 'hidden' : ''}`} />
+  <Image src={likeFillIcon} alt="" class={`like-filled size-6 ${liked ? '' : 'hidden'}`} />
+</button>

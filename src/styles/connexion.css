@@ -1,0 +1,3 @@
+@media (min-width: 1024px) {
+  #btn-connexion { left: max(20px, calc(25% + 107px)) !important; right: auto !important; }
+}

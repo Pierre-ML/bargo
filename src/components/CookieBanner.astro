@@ -1,0 +1,35 @@
+---
+// CookieBanner.astro — bandeau de consentement cookies
+---
+
+<div
+  id="cookie-banner"
+  class="fixed bottom-0 left-0 right-0 z-9999 hidden bg-neutral-900/97 backdrop-blur border-t border-white/8"
+>
+  <div class="max-w-360 mx-auto px-4 lg:px-20 py-4 lg:py-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 lg:gap-8">
+    <p class="text-sm text-neutral-300 m-0 lg:max-w-175 leading-relaxed">
+      Nous utilisons des cookies essentiels pour le bon fonctionnement du site (connexion, session).
+      En continuant à naviguer, vous acceptez leur utilisation conformément à notre
+      <a href="/mention_legal" class="underline text-primary-500 hover:opacity-80 transition-opacity">politique de confidentialité</a>.
+    </p>
+    <div class="flex items-center gap-3 lg:gap-4 shrink-0">
+      <button
+        id="cookie-refuse"
+        class="flex-1 lg:flex-none text-sm text-neutral-300 font-medium px-4 lg:px-6 py-2 border border-neutral-500 hover:border-white hover:text-white transition-colors cursor-pointer bg-transparent"
+      >
+        Refuser
+      </button>
+      <button
+        id="cookie-accept"
+        class="flex-1 lg:flex-none text-sm text-white font-medium px-4 lg:px-6 py-2 bg-primary-600 hover:opacity-90 transition-opacity cursor-pointer border-0"
+      >
+        Accepter
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  import '../js/cookie-banner.js';
+</script>
+

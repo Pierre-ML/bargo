@@ -1,0 +1,79 @@
+---
+// @ts-nocheck
+// Modals et écran de fin pour la page session/[id]
+import { Image } from 'astro:assets';
+import searchIcon from '../assets/icon/search.svg';
+---
+
+<!-- ── Modal : Ajouter bars / jeux / amis ─────────────────────── -->
+<div id="add-modal" class="hidden fixed inset-0 bg-black/65 z-50 items-center justify-center">
+  <div class="bg-neutral-800 w-150 max-h-[80vh] flex flex-col rounded-1.25 overflow-hidden shadow-2xl">
+    <div class="flex justify-between items-center px-7 py-5 border-b border-white/10">
+      <h3 id="modal-title" class="text-white m-0"></h3>
+      <button id="modal-close" class="bg-transparent border-0 text-white text-6.5 leading-none cursor-pointer opacity-60">×</button>
+    </div>
+    <div class="px-7 py-3.5 border-b border-white/10">
+      <div class="flex items-center gap-3 rounded-1.25 px-3.5 bg-zinc-800 h-10.5">
+        <Image src={searchIcon} alt="" width={14} height={14} class="opacity-40 shrink-0" />
+        <input id="modal-search" type="text" placeholder="Rechercher…"
+          class="bg-transparent flex-1 text-3.5 font-medium outline-none border-0 text-neutral-200 placeholder-neutral-200/40" />
+      </div>
+    </div>
+    <div id="modal-list" class="overflow-y-auto flex-1 px-7 py-5"></div>
+    <div class="px-7 py-4.5 flex justify-end border-t border-white/10">
+      <button id="modal-confirm" class="bg-primary-600 h-10.5 px-9 text-white text-3.5 font-medium border-0 cursor-pointer rounded">Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal : Supprimer la session ───────────────────────────── -->
+<div id="delete-modal" class="hidden fixed inset-0 bg-black/70 z-60 items-center justify-center">
+  <div class="bg-neutral-800 w-[min(440px,92vw)] rounded-1.25 overflow-hidden shadow-2xl">
+    <div class="bg-red-500 px-7 py-5">
+      <p class="text-2.75 font-bold uppercase tracking-widest text-white/75 m-0 mb-1.5">Action irréversible</p>
+      <h3 class="text-white m-0 tracking-tight">Supprimer la session</h3>
+    </div>
+    <div class="px-7 py-6">
+      <p class="text-neutral-200/70 text-3.5 font-medium m-0 leading-normal">
+        Cette action est irréversible. La session et toutes ses données (bars, jeux, invités) seront définitivement supprimées.
+      </p>
+    </div>
+    <div class="flex gap-3 px-7 pb-6 justify-end">
+      <button id="delete-modal-cancel" class="h-10.5 px-6 bg-transparent border border-white/25 text-neutral-200/70 text-3.5 font-medium cursor-pointer rounded">Annuler</button>
+      <button id="delete-modal-confirm" class="h-10.5 px-6 bg-red-500 border-0 text-white text-3.5 font-medium cursor-pointer rounded">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal : Arrêter la session ─────────────────────────────── -->
+<div id="stop-modal" class="hidden fixed inset-0 bg-black/70 z-60 items-center justify-center">
+  <div class="bg-neutral-800 w-[min(440px,92vw)] rounded-1.25 overflow-hidden shadow-2xl">
+    <div class="bg-red-500 px-7 py-5">
+      <p class="text-2.75 font-bold uppercase tracking-widest text-white/75 m-0 mb-1.5">Confirmation requise</p>
+      <h3 class="text-white m-0 tracking-tight">Arrêter la session ?</h3>
+    </div>
+    <div class="px-7 py-6">
+      <p class="text-neutral-200/70 text-3.5 font-medium m-0 leading-normal">
+        La session sera marquée comme terminée. Tous les participants perdront l'accès à la session en cours.<br/><br/>
+        <span class="text-red-400 font-semibold">Cette action est irréversible.</span>
+      </p>
+    </div>
+    <div class="flex gap-3 px-7 pb-6 justify-end">
+      <button id="stop-modal-cancel" class="h-10.5 px-6 bg-transparent border border-white/25 text-neutral-200/70 text-3.5 font-semibold cursor-pointer rounded hover:bg-white/5 transition-colors">Non, continuer</button>
+      <button id="stop-modal-confirm" class="h-10.5 px-6 bg-red-500 border-0 text-white text-3.5 font-semibold cursor-pointer rounded hover:bg-red-600 transition-colors">Oui, arrêter</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Écran de fin ────────────────────────────────────────────── -->
+<div id="end-screen" class="hidden fixed inset-0 bg-neutral-800 z-70 overflow-y-auto">
+  <div class="max-w-130 mx-auto px-6 pt-12 pb-15">
+    <p class="text-2.75 font-bold uppercase tracking-widest text-primary-500 m-0 mb-2">Barathon terminé</p>
+    <h2 class="text-white m-0 mb-9 tracking-tight">Résumé de la session</h2>
+    <div id="end-bonus-card"></div>
+    <div id="end-members-list"></div>
+    <a href="/session" class="flex items-center justify-center h-12.5 bg-primary-600 text-white text-3.75 font-medium no-underline rounded mt-8">
+      Terminer
+    </a>
+  </div>
+</div>

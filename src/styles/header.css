@@ -1,0 +1,44 @@
+/* Hamburger bars transition */
+.ham-bar {
+  transition: transform 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease;
+}
+
+/* État ouvert */
+#nav-hamburger.is-open .ham-bar:nth-child(1) {
+  transform: translateY(9px) rotate(45deg);
+}
+#nav-hamburger.is-open .ham-bar:nth-child(2) {
+  opacity: 0;
+  transform: scaleX(0);
+}
+#nav-hamburger.is-open .ham-bar:nth-child(3) {
+  transform: translateY(-9px) rotate(-45deg);
+}
+
+/* Menu overlay transition */
+#nav-mobile-menu {
+  top: 92px;
+  opacity: 0;
+  transform: translateY(-12px);
+  pointer-events: none;
+  transition: opacity 0.35s cubic-bezier(0.4,0,0.2,1),
+              transform 0.35s cubic-bezier(0.4,0,0.2,1);
+}
+#nav-mobile-menu.is-open {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Apparition décalée des liens */
+.nav-link {
+  opacity: 0;
+  transform: translateX(-16px);
+  transition: opacity 0.3s ease, transform 0.3s ease, color 0.2s ease;
+}
+#nav-mobile-menu.is-open .nav-link:nth-child(1) { opacity: 1; transform: translateX(0); transition-delay: 0.05s; }
+#nav-mobile-menu.is-open .nav-link:nth-child(2) { opacity: 1; transform: translateX(0); transition-delay: 0.1s;  }
+#nav-mobile-menu.is-open .nav-link:nth-child(3) { opacity: 1; transform: translateX(0); transition-delay: 0.15s; }
+#nav-mobile-menu.is-open .nav-link:nth-child(4) { opacity: 1; transform: translateX(0); transition-delay: 0.2s;  }
+#nav-mobile-menu.is-open .nav-link:nth-child(5) { opacity: 1; transform: translateX(0); transition-delay: 0.25s; }
+#nav-mobile-menu.is-open .nav-link:nth-child(6) { opacity: 1; transform: translateX(0); transition-delay: 0.3s;  }

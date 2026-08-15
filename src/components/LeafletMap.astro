@@ -1,0 +1,24 @@
+---
+const {
+  id,
+  lat,
+  lon,
+  name = 'BARGO',
+  zoom = 16,
+  class: className = '',
+} = Astro.props;
+---
+
+<div
+  id={id}
+  data-leaflet-map
+  data-lat={lat}
+  data-lon={lon}
+  data-name={name}
+  data-zoom={zoom}
+  class={className}
+></div>
+
+<script>
+  import '../js/leaflet-map.js';
+</script>

@@ -1,0 +1,146 @@
+---
+// @ts-nocheck
+import { Image } from 'astro:assets';
+import notifIcon from '../assets/icon/notifcation.svg';
+import notifSessionIcon from '../assets/icon/notif_session.svg';
+import arrowRightLg from '../assets/icon/arrow_right_lg.svg';
+import { PB_URL } from '../../backend/backend.js';
+
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+const isLoggedIn = !!(token && userId);
+
+let demandeAmies   = [];
+let demandeSession = [];
+let notifications  = [];
+
+if (isLoggedIn) {
+  try {
+    const userRes = await fetch(
+      `${PB_URL}/api/collections/users/records/${userId}?expand=demande_amies,demande_session`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (userRes.ok) {
+      const user = await userRes.json();
+      demandeAmies   = user.expand?.demande_amies  ?? [];
+      demandeSession = user.expand?.demande_session ?? [];
+    }
+  } catch {}
+
+  try {
+    const filter = encodeURIComponent(`user = "${userId}" && lu = false`);
+    const notifRes = await fetch(
+      `${PB_URL}/api/collections/notifications/records?perPage=10&sort=-created&filter=${filter}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (notifRes.ok) {
+      const data = await notifRes.json();
+      notifications = data.items ?? [];
+    }
+  } catch {}
+}
+
+const totalCount = demandeAmies.length + demandeSession.length + notifications.length;
+
+function timeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1)  return "À l'instant";
+  if (mins < 60) return `Il y a ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)  return `Il y a ${hrs}h`;
+  return `Il y a ${Math.floor(hrs / 24)}j`;
+}
+---
+
+{isLoggedIn && totalCount > 0 && (
+  <div id="notif-widget" class="fixed bottom-6 right-6 z-200 flex flex-col items-end gap-3">
+
+    <!-- Panneau -->
+    <div
+      id="notif-panel"
+      class="hidden flex-col w-80 max-h-110 bg-white rounded-xl shadow-xl overflow-hidden"
+      role="dialog"
+      aria-label="Notifications"
+      aria-modal="false"
+    >
+
+      <!-- Header -->
+      <div class="px-4 py-3.5 bg-neutral-800 flex items-center justify-between shrink-0">
+        <span class="text-white font-bold text-sm" style="font-family:Manrope,sans-serif">Notifications</span>
+        <span class="bg-red-500 text-white text-xs font-bold px-1.75 py-0.5 rounded-full">
+          {totalCount} nouvelle{totalCount > 1 ? 's' : ''}
+        </span>
+      </div>
+
+      <!-- Liste -->
+      <div class="overflow-y-auto flex-1 flex flex-col">
+
+        {demandeAmies.map(u => (
+          <div class="flex items-center gap-2.5 px-4 py-3 border-b border-neutral-200 bg-green-50">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white bg-primary-900" aria-hidden="true">
+              {(u.pseudo || u.prenom || '?')[0].toUpperCase()}
+            </div>
+            <p class="flex-1 text-xs font-semibold text-neutral-800 m-0 leading-snug">
+              <strong class="text-primary-900">{u.pseudo || `${u.prenom ?? ''} ${u.nom ?? ''}`.trim() || 'Utilisateur'}</strong> vous a envoyé une demande d'ami
+            </p>
+            <div class="w-2 h-2 rounded-full bg-red-500 shrink-0" aria-hidden="true"></div>
+          </div>
+        ))}
+
+        {demandeSession.map(s => (
+          <div class="flex items-center gap-2.5 px-4 py-3 border-b border-neutral-200 bg-green-50">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white bg-neutral-800" aria-hidden="true">
+              <Image src={notifSessionIcon} alt="" width={15} height={15} class="brightness-0 invert pointer-events-none" />
+            </div>
+            <p class="flex-1 text-xs font-semibold text-neutral-800 m-0 leading-snug">
+              Invitation au barathon <strong class="text-primary-900">{s.nom ?? 'Session sans nom'}</strong>
+            </p>
+            <div class="w-2 h-2 rounded-full bg-red-500 shrink-0" aria-hidden="true"></div>
+          </div>
+        ))}
+
+        {notifications.map(notif => (
+          <div class="flex items-center gap-2.5 px-4 py-3 border-b border-neutral-200 bg-green-50">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white bg-primary-600" aria-hidden="true">
+              <Image src={notifIcon} alt="" width={14} height={14} class="brightness-0 invert pointer-events-none" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-semibold text-neutral-800 m-0 leading-snug">{notif.message ?? notif.texte ?? notif.contenu ?? 'Notification'}</p>
+              <p class="text-xs text-neutral-500 mt-0.75 mb-0">{timeAgo(notif.created)}</p>
+            </div>
+            <div class="w-2 h-2 rounded-full bg-red-500 shrink-0" aria-hidden="true"></div>
+          </div>
+        ))}
+
+      </div>
+
+      <!-- Footer -->
+      <a
+        href="/profil?tab=notifications"
+        class="block px-4 py-2.75 text-center text-xs font-semibold text-primary-900 no-underline border-t border-neutral-300 bg-white shrink-0 hover:opacity-80 transition-opacity"
+      >
+        Voir toutes les notifications <Image src={arrowRightLg} alt="" width={16} height={16} class="brightness-0 inline-block align-middle" />
+      </a>
+    </div>
+
+    <!-- Bouton cloche -->
+    <button
+      id="notif-btn"
+      class="w-13 h-13 rounded-full bg-neutral-800 border-0 cursor-pointer flex items-center justify-center shadow-lg transition-all duration-200 relative shrink-0 hover:scale-105 hover:shadow-2xl"
+      aria-label={`Notifications — ${totalCount} non lue${totalCount > 1 ? 's' : ''}`}
+      aria-haspopup="dialog"
+      aria-expanded="false"
+    >
+      <Image src={notifIcon} alt="" width={22} height={22} class="brightness-0 invert shrink-0 pointer-events-none" aria-hidden="true" />
+      <span class="absolute -top-0.75 -right-0.75 min-w-4.5 h-4.5 px-1 bg-red-500 text-white rounded-full text-xs font-bold flex items-center justify-center border-2 border-white box-border leading-none pointer-events-none" aria-hidden="true">
+        {totalCount > 99 ? '99+' : totalCount}
+      </span>
+    </button>
+
+  </div>
+)}
+
+<script>
+  import '../js/notif-bubble.js';
+</script>

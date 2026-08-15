@@ -1,0 +1,539 @@
+---
+// @ts-nocheck
+import Layout from '../layouts/Layout.astro';
+import { Image } from 'astro:assets';
+import { PB_URL, getCollectionAuth } from '../../backend/backend.js';
+import checkIcon from '../assets/icon/check.svg';
+import userIcon     from '../assets/icon/user.svg';
+import downloadIcon  from '../assets/icon/download.svg';
+import arrowRightLg  from '../assets/icon/arrow_right_lg.svg';
+import calendarIcon  from '../assets/icon/calendar.svg';
+import mapPinIcon    from '../assets/icon/map_pin.svg';
+import docIcon       from '../assets/icon/doc.svg';
+import instaIcon    from '../assets/icon/insta.svg';
+import facebookIcon from '../assets/icon/facebook.svg';
+import discordIcon  from '../assets/icon/discord.svg';
+import searchIcon   from '../assets/icon/search.svg';
+import '../styles/bienvenue.css';
+
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+if (!token || !userId) return Astro.redirect('/connexion');
+
+const usersRaw = await getCollectionAuth('users', token, { perPage: 200, sort: 'pseudo' });
+const allUsers = usersRaw
+  .filter(u => u.id !== userId)
+  .map(u => ({ id: u.id, collectionName: u.collectionName, pseudo: u.pseudo ?? '', prenom: u.prenom ?? '', nom: u.nom ?? '', avatar: u.avatar ?? null }));
+---
+
+<Layout title="Bienvenue sur Bargo" noFooter={true}>
+
+
+<div class="flex flex-col lg:flex-row" style="min-height: calc(100vh - 92px);">
+
+  <!-- ===== LEFT PANEL ===== -->
+  <div id="onboarding-left" class="hidden lg:flex lg:w-164.25 lg:shrink-0 bg-primary-900 flex-col" style="height: calc(100vh - 92px); position: sticky; top: 92px;">
+
+    <!-- Title zone -->
+    <div class="px-20 pt-18.75">
+      <p style="font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:3px; color:#72c073; margin:0 0 20px 0;">Compléter mon profil</p>
+      <h1 id="left-title" class="text-white m-0 uppercase leading-none" style="font-size:50px; letter-spacing:3px; word-break:break-word;">Photo de<br>profil</h1>
+    </div>
+
+    <div class="flex-1"></div>
+
+    <!-- Step indicators -->
+    <div class="px-20 mb-5">
+      <div class="flex items-center">
+        <div class="step-circle flex items-center justify-center w-12.5 h-12.5 rounded-full border-2 shrink-0 transition-all duration-400" data-step="1"
+          style="background:white; border-color:white;">
+          <span class="step-num font-bold" style="font-size:18px; color:#094736;">1</span>
+          <Image src={checkIcon} alt="" width={20} height={20} class="step-check brightness-0 invert" style="display:none;" />
+        </div>
+        <div class="step-line flex-1 mx-2 transition-all duration-400" style="height:5px; background:rgba(255,255,255,0.25); border-radius:100px;"></div>
+        <div class="step-circle flex items-center justify-center w-12.5 h-12.5 rounded-full border-2 shrink-0 transition-all duration-400" data-step="2"
+          style="background:transparent; border-color:rgba(255,255,255,0.3);">
+          <span class="step-num font-bold" style="font-size:18px; color:rgba(255,255,255,0.3);">2</span>
+          <Image src={checkIcon} alt="" width={20} height={20} class="step-check brightness-0 invert" style="display:none;" />
+        </div>
+        <div class="step-line flex-1 mx-2 transition-all duration-400" style="height:5px; background:rgba(255,255,255,0.25); border-radius:100px;"></div>
+        <div class="step-circle flex items-center justify-center w-12.5 h-12.5 rounded-full border-2 shrink-0 transition-all duration-400" data-step="3"
+          style="background:transparent; border-color:rgba(255,255,255,0.3);">
+          <span class="step-num font-bold" style="font-size:18px; color:rgba(255,255,255,0.3);">3</span>
+          <Image src={checkIcon} alt="" width={20} height={20} class="step-check brightness-0 invert" style="display:none;" />
+        </div>
+        <div class="step-line flex-1 mx-2 transition-all duration-400" style="height:5px; background:rgba(255,255,255,0.25); border-radius:100px;"></div>
+        <div class="step-circle flex items-center justify-center w-12.5 h-12.5 rounded-full border-2 shrink-0 transition-all duration-400" data-step="4"
+          style="background:transparent; border-color:rgba(255,255,255,0.3);">
+          <span class="step-num font-bold" style="font-size:18px; color:rgba(255,255,255,0.3);">4</span>
+          <Image src={checkIcon} alt="" width={20} height={20} class="step-check brightness-0 invert" style="display:none;" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="px-20 mb-15">
+      <div class="h-3.75 rounded-full overflow-hidden" style="background:rgba(255,255,255,0.2);">
+        <div id="progress-bar" class="h-full rounded-full transition-all duration-500" style="width:0%; background:#72c073;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== RIGHT PANEL ===== -->
+  <div id="onboarding-right" class="flex-1 bg-neutral-800 overflow-y-auto">
+
+    <!-- ─── STEP 1 : Avatar ─── -->
+    <div id="panel-1" class="flex flex-col px-5 lg:px-17.5 py-10 lg:py-14" style="min-height: calc(100vh - 92px);">
+      <h3 class="text-white m-0 mb-2" style="font-size:25px; font-weight:500; letter-spacing:-1px;">Votre photo de profil</h3>
+      <p style="color:#BDBDBD; font-size:14px; font-weight:500; margin:0 0 40px 0; line-height:1.5;">Choisissez une photo pour que vos amis vous reconnaissent. Vous pourrez la modifier à tout moment.</p>
+
+      <div class="flex flex-col items-start gap-4 flex-1">
+        <label class="cursor-pointer group relative">
+          <div id="avatar-preview" class="w-36 h-36 rounded-full overflow-hidden flex flex-col items-center justify-center transition-all duration-300"
+            style="background:#2c2c2c; border:2px dashed rgba(255,255,255,0.25);">
+            <Image src={userIcon} alt="" width={32} height={32} class="brightness-0 invert opacity-30" />
+            <span style="font-size:12px; font-weight:500; margin-top:6px; color:rgba(255,255,255,0.3);">Photo</span>
+          </div>
+          <div class="absolute inset-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+            style="background:rgba(9,71,54,0.8);">
+            <Image src={downloadIcon} alt="" width={24} height={24} class="brightness-0 invert" />
+          </div>
+          <input id="avatar-input" type="file" accept="image/*" class="hidden" />
+        </label>
+        <p style="color:rgba(255,255,255,0.35); font-size:13px; font-weight:500; margin:0;">JPG, PNG — max 5 Mo</p>
+      </div>
+
+      <!-- Footer step -->
+      <div class="flex items-center justify-between gap-4 mt-10 pt-8" style="border-top:1px solid rgba(255,255,255,0.1);">
+        <a href="/profil" style="color:rgba(255,255,255,0.4); font-size:14px; font-weight:500; text-decoration:none;" class="hover:opacity-70 transition-opacity">
+          Passer cette étape
+        </a>
+        <button onclick="window.saveAndNext(1)"
+          class="flex items-center gap-2 text-white font-medium hover:brightness-110 active:scale-[0.97] transition-all cursor-pointer border-0"
+          style="background:#094736; height:50px; padding:0 32px; font-size:14px; border-radius:4px;">
+          Continuer
+          <Image src={arrowRightLg} alt="" width={14} height={14} class="brightness-0 invert" />
+        </button>
+      </div>
+    </div>
+
+    <!-- ─── STEP 2 : Infos ─── -->
+    <div id="panel-2" class="hidden flex-col px-5 lg:px-17.5 py-10 lg:py-14" style="min-height: calc(100vh - 92px);">
+      <h3 class="text-white m-0 mb-2" style="font-size:25px; font-weight:500; letter-spacing:-1px;">Parlez-nous de vous</h3>
+      <p style="color:#BDBDBD; font-size:14px; font-weight:500; margin:0 0 40px 0; line-height:1.5;">Ces informations apparaîtront sur votre profil public.</p>
+
+      <div class="flex flex-col gap-7 flex-1">
+
+        <!-- Prénom + Nom -->
+        <div class="flex gap-5">
+          <div class="flex-1">
+            <div class="flex items-center gap-2.5 mb-3">
+              <Image src={userIcon} alt="" width={20} height={20} class="brightness-0 invert" />
+              <span style="font-size:16px; font-weight:700; color:white;">Prénom</span>
+            </div>
+            <div style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); height:61px; display:flex; align-items:center; padding:0 20px;">
+              <input id="f-prenom" type="text" placeholder="Jean"
+                style="background:transparent; width:100%; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e;"
+                class="placeholder-neutral-500" />
+            </div>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center gap-2.5 mb-3">
+              <Image src={userIcon} alt="" width={20} height={20} class="brightness-0 invert" />
+              <span style="font-size:16px; font-weight:700; color:white;">Nom</span>
+            </div>
+            <div style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); height:61px; display:flex; align-items:center; padding:0 20px;">
+              <input id="f-nom" type="text" placeholder="Dupont"
+                style="background:transparent; width:100%; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e;"
+                class="placeholder-neutral-500" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Âge + Ville -->
+        <div class="flex gap-5">
+          <div class="flex-1">
+            <div class="flex items-center gap-2.5 mb-3">
+              <Image src={calendarIcon} alt="" width={20} height={20} class="brightness-0 invert" />
+              <span style="font-size:16px; font-weight:700; color:white;">Âge</span>
+            </div>
+            <div style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); height:61px; display:flex; align-items:center; padding:0 20px;">
+              <input id="f-age" type="number" min="18" max="99" placeholder="25"
+                style="background:transparent; width:100%; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e;"
+                class="placeholder-neutral-500" />
+            </div>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center gap-2.5 mb-3">
+              <Image src={mapPinIcon} alt="" width={20} height={20} class="brightness-0 invert" />
+              <span style="font-size:16px; font-weight:700; color:white;">Ville</span>
+            </div>
+            <div style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); height:61px; display:flex; align-items:center; padding:0 20px;">
+              <input id="f-ville" type="text" placeholder="Montbéliard"
+                style="background:transparent; width:100%; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e;"
+                class="placeholder-neutral-500" />
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer step -->
+      <div class="flex items-center justify-between gap-4 mt-10 pt-8" style="border-top:1px solid rgba(255,255,255,0.1);">
+        <button onclick="window.skipStep(2)" style="color:rgba(255,255,255,0.4); font-size:14px; font-weight:500; background:transparent; border:none; cursor:pointer; padding:0;" class="hover:opacity-70 transition-opacity">
+          Passer cette étape
+        </button>
+        <button onclick="window.saveAndNext(2)"
+          class="flex items-center gap-2 text-white font-medium hover:brightness-110 active:scale-[0.97] transition-all cursor-pointer border-0"
+          style="background:#094736; height:50px; padding:0 32px; font-size:14px; border-radius:4px;">
+          Continuer
+          <Image src={arrowRightLg} alt="" width={14} height={14} class="brightness-0 invert" />
+        </button>
+      </div>
+    </div>
+
+    <!-- ─── STEP 3 : Bio & Réseaux ─── -->
+    <div id="panel-3" class="hidden flex-col px-5 lg:px-17.5 py-10 lg:py-14" style="min-height: calc(100vh - 92px);">
+      <h3 class="text-white m-0 mb-2" style="font-size:25px; font-weight:500; letter-spacing:-1px;">Votre univers</h3>
+      <p style="color:#BDBDBD; font-size:14px; font-weight:500; margin:0 0 40px 0; line-height:1.5;">Ajoutez une bio et vos réseaux pour que vos amis vous retrouvent facilement.</p>
+
+      <div class="flex flex-col gap-7 flex-1">
+
+        <!-- Description -->
+        <div>
+          <div class="flex items-center gap-2.5 mb-3">
+            <Image src={docIcon} alt="" width={20} height={20} class="brightness-0 invert" />
+            <span style="font-size:16px; font-weight:700; color:white;">Description</span>
+          </div>
+          <div style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); padding:16px 20px;">
+            <textarea id="f-description" rows="3" placeholder="Passionné de soirées et de bonne ambiance…"
+              style="background:transparent; width:100%; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e; resize:none; line-height:1.6;"
+              class="placeholder-neutral-500"></textarea>
+          </div>
+        </div>
+
+        <!-- Instagram + Facebook -->
+        <div class="flex gap-5">
+          <div class="flex-1">
+            <div class="flex items-center gap-2.5 mb-3">
+              <Image src={instaIcon} alt="" width={20} height={20} class="brightness-0 invert" />
+              <span style="font-size:16px; font-weight:700; color:white;">Instagram</span>
+            </div>
+            <div style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); height:61px; display:flex; align-items:center; padding:0 20px; gap:4px;">
+              <span style="font-size:14px; font-weight:500; color:#646262;">@</span>
+              <input id="f-insta" type="text" placeholder="votre_pseudo"
+                style="background:transparent; flex:1; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e;"
+                class="placeholder-neutral-500" />
+            </div>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center gap-2.5 mb-3">
+              <Image src={facebookIcon} alt="" width={20} height={20} class="brightness-0 invert" />
+              <span style="font-size:16px; font-weight:700; color:white;">Facebook</span>
+            </div>
+            <div style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); height:61px; display:flex; align-items:center; padding:0 20px;">
+              <input id="f-facbook" type="text" placeholder="Nom Facebook"
+                style="background:transparent; width:100%; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e;"
+                class="placeholder-neutral-500" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Discord -->
+        <div class="lg:w-1/2">
+          <div class="flex items-center gap-2.5 mb-3">
+            <Image src={discordIcon} alt="" width={20} height={20} class="brightness-0 invert" />
+            <span style="font-size:16px; font-weight:700; color:white;">Discord</span>
+          </div>
+          <div style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); height:61px; display:flex; align-items:center; padding:0 20px;">
+            <input id="f-discord" type="text" placeholder="pseudo#0000"
+              style="background:transparent; width:100%; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e;"
+              class="placeholder-neutral-500" />
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer step -->
+      <div class="flex items-center justify-between gap-4 mt-10 pt-8" style="border-top:1px solid rgba(255,255,255,0.1);">
+        <button onclick="window.skipStep(3)" style="color:rgba(255,255,255,0.4); font-size:14px; font-weight:500; background:transparent; border:none; cursor:pointer; padding:0;" class="hover:opacity-70 transition-opacity">
+          Passer cette étape
+        </button>
+        <button onclick="window.saveAndNext(3)"
+          class="flex items-center gap-2 text-white font-medium hover:brightness-110 active:scale-[0.97] transition-all cursor-pointer border-0"
+          style="background:#094736; height:50px; padding:0 32px; font-size:14px; border-radius:4px;">
+          Continuer
+          <Image src={arrowRightLg} alt="" width={14} height={14} class="brightness-0 invert" />
+        </button>
+      </div>
+    </div>
+
+    <!-- ─── STEP 4 : Amis ─── -->
+    <div id="panel-4" class="hidden flex-col px-5 lg:px-17.5 py-10 lg:py-14" style="min-height: calc(100vh - 92px);">
+      <h3 class="text-white m-0 mb-2" style="font-size:25px; font-weight:500; letter-spacing:-1px;">Demandes d'amis</h3>
+      <p style="color:#BDBDBD; font-size:14px; font-weight:500; margin:0 0 40px 0; line-height:1.5;">Envoyez des demandes d'amis à vos proches déjà inscrits sur Bargo. Ils pourront accepter ou refuser.</p>
+
+      <div class="flex flex-col gap-5 flex-1">
+
+        <!-- Search bar -->
+        <div style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); height:61px; display:flex; align-items:center; padding:0 20px; gap:12px;">
+          <Image src={searchIcon} alt="" width={18} height={18} style="filter:invert(41%) sepia(6%) saturate(228%) hue-rotate(314deg) brightness(95%) contrast(88%)" />
+          <input id="ami-search" type="text" placeholder="Rechercher par pseudo…"
+            style="background:transparent; flex:1; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e;"
+            class="placeholder-neutral-500" />
+        </div>
+
+        <!-- Chips sélectionnés -->
+        <div id="ami-chips" class="flex flex-wrap gap-2 min-h-6"></div>
+
+        <!-- Liste -->
+        <div id="ami-list" class="flex flex-col gap-2"></div>
+
+      </div>
+
+      <!-- Footer step -->
+      <div class="flex items-center justify-between gap-4 mt-10 pt-8" style="border-top:1px solid rgba(255,255,255,0.1);">
+        <button onclick="window.skipStep(4)" style="color:rgba(255,255,255,0.4); font-size:14px; font-weight:500; background:transparent; border:none; cursor:pointer; padding:0;" class="hover:opacity-70 transition-opacity">
+          Passer cette étape
+        </button>
+        <button onclick="window.saveAndNext(4)"
+          class="flex items-center gap-2 text-white font-medium hover:brightness-110 active:scale-[0.97] transition-all cursor-pointer border-0"
+          style="background:#094736; height:50px; padding:0 32px; font-size:14px; border-radius:4px;">
+          Terminer <Image src={checkIcon} alt="" width={14} height={14} class="brightness-0 invert" />
+        </button>
+      </div>
+    </div>
+
+  </div><!-- end right panel -->
+</div>
+
+</Layout>
+
+<script is:inline define:vars={{ pbUrl: PB_URL, pbToken: token, pbUserId: userId, allUsers }}>
+  var TOTAL        = 4;
+  var cur          = 1;
+  var selectedAmis = [];
+  var avatarFile   = null;
+
+  var leftTitles = ['Photo de<br>profil', 'Informations<br>personnelles', 'Bio &amp;<br>Réseaux', 'Vos<br>amis'];
+
+  function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function $(id) { return document.getElementById(id); }
+
+  // ── Progress ─────────────────────────────────────────────
+  function updateProgress(n) {
+    cur = n;
+
+    var lt = $('left-title');
+    if (lt) lt.innerHTML = leftTitles[n - 1];
+
+    var pct = ((n - 1) / TOTAL) * 100;
+    var bar = $('progress-bar');
+    if (bar) bar.style.width = pct + '%';
+
+    document.querySelectorAll('.step-circle').forEach(function (el) {
+      var s = parseInt(el.dataset.step);
+      var num = el.querySelector('.step-num');
+      var chk = el.querySelector('.step-check');
+      if (s < n) {
+        el.style.background = '#72c073';
+        el.style.borderColor = '#72c073';
+        if (num) num.style.display = 'none';
+        if (chk) chk.style.display = 'block';
+      } else if (s === n) {
+        el.style.background = 'white';
+        el.style.borderColor = 'white';
+        if (num) { num.style.display = 'block'; num.style.color = '#094736'; }
+        if (chk) chk.style.display = 'none';
+      } else {
+        el.style.background = 'transparent';
+        el.style.borderColor = 'rgba(255,255,255,0.3)';
+        if (num) { num.style.display = 'block'; num.style.color = 'rgba(255,255,255,0.3)'; }
+        if (chk) chk.style.display = 'none';
+      }
+    });
+
+    document.querySelectorAll('.step-line').forEach(function (line, i) {
+      line.style.background = i < n - 1 ? '#72c073' : 'rgba(255,255,255,0.25)';
+    });
+  }
+
+  function showPanel(n) {
+    for (var i = 1; i <= TOTAL; i++) {
+      var p = $('panel-' + i);
+      if (p) {
+        if (i === n) {
+          p.classList.remove('hidden');
+          p.style.display = 'flex';
+        } else {
+          p.classList.add('hidden');
+          p.style.display = 'none';
+        }
+      }
+    }
+    updateProgress(n);
+    window.scrollTo(0, 0);
+  }
+
+  // ── Avatar ───────────────────────────────────────────────
+  var avatarInput = $('avatar-input');
+  if (avatarInput) {
+    avatarInput.addEventListener('change', function () {
+      var file = this.files[0];
+      if (!file) return;
+      avatarFile = file;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var preview = $('avatar-preview');
+        preview.innerHTML = '<img src="' + e.target.result + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />';
+        preview.style.border = '2px solid #72c073';
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // ── API ──────────────────────────────────────────────────
+  async function patchUser(data) {
+    try {
+      await fetch(pbUrl + '/api/collections/users/records/' + pbUserId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + pbToken },
+        body: JSON.stringify(data),
+      });
+    } catch (_) {}
+  }
+
+  async function uploadAvatar() {
+    if (!avatarFile) return;
+    try {
+      var fd = new FormData();
+      fd.append('avatar', avatarFile);
+      await fetch(pbUrl + '/api/collections/users/records/' + pbUserId, {
+        method: 'PATCH',
+        headers: { Authorization: 'Bearer ' + pbToken },
+        body: fd,
+      });
+    } catch (_) {}
+  }
+
+  // ── Save & Next ──────────────────────────────────────────
+  window.saveAndNext = async function (step) {
+    if (step === 1) await uploadAvatar();
+    if (step === 2) {
+      var d = {};
+      var prenom = ($('f-prenom') ? $('f-prenom').value : '').trim(); if (prenom) d.prenom = prenom;
+      var nom    = ($('f-nom')    ? $('f-nom').value    : '').trim(); if (nom)    d.nom    = nom;
+      var age    = parseInt(($('f-age') ? $('f-age').value : '0')) || null; if (age && age >= 18) d.age = age;
+      var ville  = ($('f-ville')  ? $('f-ville').value  : '').trim(); if (ville)  d.ville  = ville;
+      if (Object.keys(d).length) await patchUser(d);
+    }
+    if (step === 3) {
+      var d2 = {};
+      var desc    = ($('f-description') ? $('f-description').value : '').trim(); if (desc)    d2.description = desc;
+      var insta   = ($('f-insta')       ? $('f-insta').value       : '').trim(); if (insta)   d2.insta       = insta;
+      var facbook = ($('f-facbook')     ? $('f-facbook').value     : '').trim(); if (facbook) d2.facbook     = facbook;
+      var discord = ($('f-discord')     ? $('f-discord').value     : '').trim(); if (discord) d2.discord     = discord;
+      if (Object.keys(d2).length) await patchUser(d2);
+    }
+    if (step === 4) {
+      // Envoyer une demande d'ami à chaque utilisateur sélectionné
+      for (var i = 0; i < selectedAmis.length; i++) {
+        var targetId = selectedAmis[i];
+        try {
+          // Récupérer les demandes existantes de l'utilisateur cible
+          var r = await fetch(pbUrl + '/api/collections/users/records/' + targetId, {
+            headers: { Authorization: 'Bearer ' + pbToken }
+          });
+          if (r.ok) {
+            var targetUser = await r.json();
+            var existing   = Array.isArray(targetUser.demande_amies) ? targetUser.demande_amies : [];
+            if (existing.indexOf(pbUserId) < 0) {
+              existing.push(pbUserId);
+              await fetch(pbUrl + '/api/collections/users/records/' + targetId, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + pbToken },
+                body: JSON.stringify({ demande_amies: existing }),
+              });
+            }
+          }
+        } catch (_) {}
+      }
+      window.location.href = '/profil';
+      return;
+    }
+    showPanel(step + 1);
+  };
+
+  window.skipStep = function (step) {
+    if (step >= TOTAL) { window.location.href = '/profil'; return; }
+    showPanel(step + 1);
+  };
+
+  // ── Amis ─────────────────────────────────────────────────
+  function imgUrl(u) {
+    return u.avatar ? pbUrl + '/api/files/' + u.collectionName + '/' + u.id + '/' + u.avatar : null;
+  }
+
+  function av(u, size) {
+    size = size || 36;
+    var url = imgUrl(u);
+    if (url) return '<img src="' + url + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />';
+    var l = (u.pseudo || u.prenom || '?').charAt(0).toUpperCase();
+    return '<div style="width:100%;height:100%;background:#094736;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:' + Math.round(size * 0.38) + 'px;">' + esc(l) + '</div>';
+  }
+
+  function renderChips() {
+    var el = $('ami-chips');
+    if (!el) return;
+    el.innerHTML = selectedAmis.map(function (id) {
+      var u = allUsers.find(function (x) { return x.id === id; });
+      if (!u) return '';
+      return '<span style="display:inline-flex;align-items:center;gap:5px;background:#347645;color:white;font-size:12px;font-weight:500;padding:3px 10px 3px 4px;border-radius:20px;">' +
+        '<span style="width:22px;height:22px;border-radius:50%;overflow:hidden;flex-shrink:0;">' + av(u, 22) + '</span>' +
+        esc(u.pseudo || u.prenom || 'User') +
+        '<button data-rid="' + id + '" style="background:transparent;border:none;color:rgba(255,255,255,0.55);cursor:pointer;font-size:15px;padding:0;line-height:1;margin-left:1px;">×</button>' +
+      '</span>';
+    }).join('');
+    el.querySelectorAll('[data-rid]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        selectedAmis = selectedAmis.filter(function (id) { return id !== btn.dataset.rid; });
+        renderChips();
+        var s = $('ami-search'); renderList(s ? s.value : '');
+      });
+    });
+  }
+
+  function renderList(q) {
+    var el = $('ami-list');
+    if (!el) return;
+    q = (q || '').toLowerCase();
+    var filtered = allUsers.filter(function (u) {
+      return !q || (u.pseudo + ' ' + u.prenom + ' ' + u.nom).toLowerCase().includes(q);
+    }).slice(0, 12);
+
+    el.innerHTML = filtered.map(function (u) {
+      var sel = selectedAmis.indexOf(u.id) >= 0;
+      return '<div style="display:flex;align-items:center;gap:12px;background:#2c2c2c;border-radius:6px;padding:10px 14px;">' +
+        '<div style="width:40px;height:40px;flex-shrink:0;border-radius:50%;overflow:hidden;">' + av(u, 40) + '</div>' +
+        '<p style="color:white;font-size:14px;font-weight:500;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(u.pseudo || (u.prenom + ' ' + u.nom).trim() || 'Utilisateur') + '</p>' +
+        '<button data-uid="' + u.id + '" style="flex-shrink:0;height:32px;padding:0 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;border-radius:20px;transition:all 0.15s;background:' + (sel ? '#347645' : '#094736') + ';color:white;">' + (sel ? 'Demande envoyée' : 'Envoyer une demande') + '</button>' +
+      '</div>';
+    }).join('') || '<p style="color:rgba(255,255,255,0.3);font-size:13px;margin:0;">Aucun résultat.</p>';
+
+    el.querySelectorAll('[data-uid]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var uid = btn.dataset.uid;
+        var idx = selectedAmis.indexOf(uid);
+        if (idx >= 0) selectedAmis.splice(idx, 1); else selectedAmis.push(uid);
+        renderChips();
+        var s = $('ami-search'); renderList(s ? s.value : '');
+      });
+    });
+  }
+
+  var amiSearch = $('ami-search');
+  if (amiSearch) amiSearch.addEventListener('input', function () { renderList(this.value); });
+
+  showPanel(1);
+  renderList('');
+</script>

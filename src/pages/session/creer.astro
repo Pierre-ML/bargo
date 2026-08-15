@@ -1,0 +1,314 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { Image } from 'astro:assets';
+import { getCollection, PB_URL } from '../../../backend/backend.js';
+import checkIcon from '../../assets/icon/check.svg';
+import styloIcon    from '../../assets/icon/stylo.svg';
+import calendarIcon from '../../assets/icon/calendar.svg';
+import clockIcon    from '../../assets/icon/clock.svg';
+import docIcon      from '../../assets/icon/doc.svg';
+import searchIcon   from '../../assets/icon/search.svg';
+
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+if (!token || !userId) return Astro.redirect('/connexion');
+
+const [barsRaw, jeuxRaw, usersRaw] = await Promise.all([
+  getCollection('bar',   { sort: 'nom',    perPage: 200 }),
+  getCollection('jeux',  { sort: 'nom',    perPage: 200 }),
+  getCollection('users', { sort: 'pseudo', perPage: 200 }),
+]);
+
+const bars = barsRaw.map(b => ({
+  id: b.id, collectionName: b.collectionName,
+  nom: b.nom ?? '', adresse: b.adresse ?? '',
+  img: b.img?.[0] ?? null,
+  lat: b.localisation?.lat ?? null, lon: b.localisation?.lon ?? null,
+}));
+
+const jeux = jeuxRaw.map(j => ({
+  id: j.id, collectionName: j.collectionName,
+  nom: j.nom ?? '', description: j.description ?? '',
+  img: Array.isArray(j.img) ? (j.img[0] ?? null) : (j.img ?? null),
+}));
+
+const users = usersRaw
+  .filter(u => u.id !== userId)
+  .map(u => ({
+    id: u.id, collectionName: u.collectionName,
+    pseudo: u.pseudo ?? '', prenom: u.prenom ?? '', nom: u.nom ?? '',
+    avatar: u.avatar ?? null,
+  }));
+
+let barFavori = [];
+let amiesIds  = [];
+if (userId && token) {
+  const userRes = await fetch(`${PB_URL}/api/collections/users/records/${userId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (userRes.ok) {
+    const user = await userRes.json();
+    barFavori = Array.isArray(user.bar_favori) ? user.bar_favori : [];
+    amiesIds  = Array.isArray(user.amies)      ? user.amies      : [];
+  }
+}
+
+const amieUsers = users.filter(u => amiesIds.includes(u.id));
+
+const appData = JSON.stringify({ bars, jeux, users: amieUsers, PB_URL, token, userId, barFavori, amiesIds });
+---
+
+<Layout title="Créer un barathon — Bargo">
+
+<!-- ====================================================== -->
+<!-- MAIN LAYOUT                                            -->
+<!-- ====================================================== -->
+<div class="flex flex-col lg:flex-row" style="min-height: calc(100vh - 92px);">
+
+  <!-- ===== LEFT PANEL ===== -->
+  <div id="left-panel" class="hidden lg:flex lg:w-164.25 lg:shrink-0 bg-primary-900 flex-col" style="height: calc(100vh - 92px); position: sticky; top: 92px;">
+
+    <!-- Title zone -->
+    <div class="px-20 pt-18.75">
+      <p style="font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:3px; color:#72c073; margin:0 0 20px 0;">Créer un barathon</p>
+      <h1 id="left-title" class="text-white m-0 uppercase leading-none" style="font-size:50px; letter-spacing:3px; word-break:break-word;">Informations<br>de la soiree</h1>
+    </div>
+
+    <div class="flex-1"></div>
+
+    <!-- Step indicators -->
+    <div class="px-20 mb-5">
+      <div class="flex items-center">
+        <div class="step-circle flex items-center justify-center w-12.5 h-12.5 rounded-full border-2 shrink-0 transition-all duration-400" data-step="1"
+          style="background:white; border-color:white;">
+          <span class="step-num font-bold" style="font-size:18px; color:#094736;">1</span>
+          <Image src={checkIcon} alt="" width={20} height={20} class="step-check brightness-0 invert" style="display:none;" />
+        </div>
+        <div class="step-line flex-1 mx-2 transition-all duration-400" style="height:5px; background:rgba(255,255,255,0.25); border-radius:100px;"></div>
+        <div class="step-circle flex items-center justify-center w-12.5 h-12.5 rounded-full border-2 shrink-0 transition-all duration-400" data-step="2"
+          style="background:transparent; border-color:rgba(255,255,255,0.3);">
+          <span class="step-num font-bold" style="font-size:18px; color:rgba(255,255,255,0.3);">2</span>
+          <Image src={checkIcon} alt="" width={20} height={20} class="step-check brightness-0 invert" style="display:none;" />
+        </div>
+        <div class="step-line flex-1 mx-2 transition-all duration-400" style="height:5px; background:rgba(255,255,255,0.25); border-radius:100px;"></div>
+        <div class="step-circle flex items-center justify-center w-12.5 h-12.5 rounded-full border-2 shrink-0 transition-all duration-400" data-step="3"
+          style="background:transparent; border-color:rgba(255,255,255,0.3);">
+          <span class="step-num font-bold" style="font-size:18px; color:rgba(255,255,255,0.3);">3</span>
+          <Image src={checkIcon} alt="" width={20} height={20} class="step-check brightness-0 invert" style="display:none;" />
+        </div>
+        <div class="step-line flex-1 mx-2 transition-all duration-400" style="height:5px; background:rgba(255,255,255,0.25); border-radius:100px;"></div>
+        <div class="step-circle flex items-center justify-center w-12.5 h-12.5 rounded-full border-2 shrink-0 transition-all duration-400" data-step="4"
+          style="background:transparent; border-color:rgba(255,255,255,0.3);">
+          <span class="step-num font-bold" style="font-size:18px; color:rgba(255,255,255,0.3);">4</span>
+          <Image src={checkIcon} alt="" width={20} height={20} class="step-check brightness-0 invert" style="display:none;" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="px-20 mb-15">
+      <div class="h-3.75 rounded-full overflow-hidden" style="background:rgba(255,255,255,0.2);">
+        <div id="progress-bar" class="h-full rounded-full transition-all duration-500" style="width:0%; background:#72c073;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== RIGHT PANEL ===== -->
+  <div id="step-view" class="flex-1 bg-neutral-800 overflow-y-auto overflow-x-hidden">
+
+    <!-- ─── STEP 1: Informations ─── -->
+    <div id="panel-1" class="flex flex-col px-5 lg:px-17.5 py-10 lg:py-14" style="min-height: calc(100vh - 92px);">
+      <h3 class="text-white m-0 mb-10" style="font-size:25px; font-weight:500; letter-spacing:-1px;">Creer son barathon</h3>
+
+      <div class="flex flex-col gap-7 flex-1">
+
+        <!-- Nom du barathon -->
+        <div>
+          <div class="flex items-center gap-2.5 mb-3">
+            <Image src={styloIcon} alt="" width={22} height={22} class="brightness-0 invert" />
+            <span style="font-size:16px; font-weight:700; color:white;">Nom du barathon</span>
+          </div>
+          <div style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); height:61px; display:flex; align-items:center; padding:0 20px;">
+            <input id="s1-nom" type="text" placeholder="Ex : La tourner du vendredi soir"
+              style="background:transparent; width:100%; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e;"
+              class="placeholder-neutral-500" />
+          </div>
+        </div>
+
+        <!-- Date + Heure départ + Heure fin -->
+        <div class="flex flex-col lg:flex-row gap-4">
+          <div class="flex-1">
+            <div class="flex items-center gap-2.5 mb-3">
+              <Image src={calendarIcon} alt="" width={22} height={22} class="brightness-0 invert" />
+              <span style="font-size:16px; font-weight:700; color:white;">Date</span>
+            </div>
+            <div style="position:relative;">
+              <div onclick="window.togglePicker('date')" style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); height:61px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; cursor:pointer; user-select:none;">
+                <span id="date-display" style="font-size:14px; font-weight:500; color:#646262;">jj / mm / aaaa</span>
+                <Image src={calendarIcon} alt="" width={18} height={18} style="filter:invert(41%) sepia(6%) saturate(228%) hue-rotate(314deg) brightness(95%) contrast(88%)" />
+              </div>
+              <div id="date-popup" style="display:none; position:absolute; top:68px; left:0; width:280px; background:white; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,0.25); z-index:300; padding:16px;"></div>
+              <input type="hidden" id="s1-date" />
+            </div>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center gap-2.5 mb-3">
+              <Image src={clockIcon} alt="" width={22} height={22} class="brightness-0 invert" />
+              <span style="font-size:16px; font-weight:700; color:white;">Heure de départ</span>
+            </div>
+            <div style="position:relative;">
+              <div onclick="window.togglePicker('heure-debut')" style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); height:61px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; cursor:pointer; user-select:none;">
+                <span id="heure-debut-display" style="font-size:14px; font-weight:500; color:#646262;">--:--</span>
+                <Image src={clockIcon} alt="" width={18} height={18} style="filter:invert(41%) sepia(6%) saturate(228%) hue-rotate(314deg) brightness(95%) contrast(88%)" />
+              </div>
+              <div id="heure-debut-popup" style="display:none; position:absolute; top:68px; left:0; width:200px; background:white; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,0.25); z-index:300; padding:12px;"></div>
+              <input type="hidden" id="s1-heure-debut" />
+            </div>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center gap-2.5 mb-3">
+              <Image src={clockIcon} alt="" width={22} height={22} class="brightness-0 invert" />
+              <span style="font-size:16px; font-weight:700; color:white;">Heure de fin</span>
+            </div>
+            <div style="position:relative;">
+              <div onclick="window.togglePicker('heure-fin')" style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); height:61px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; cursor:pointer; user-select:none;">
+                <span id="heure-fin-display" style="font-size:14px; font-weight:500; color:#646262;">--:--</span>
+                <Image src={clockIcon} alt="" width={18} height={18} style="filter:invert(41%) sepia(6%) saturate(228%) hue-rotate(314deg) brightness(95%) contrast(88%)" />
+              </div>
+              <div id="heure-fin-popup" style="display:none; position:absolute; top:68px; left:0; width:200px; background:white; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,0.25); z-index:300; padding:12px;"></div>
+              <input type="hidden" id="s1-heure-fin" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div>
+          <div class="flex items-center gap-2.5 mb-3">
+            <Image src={docIcon} alt="" width={22} height={22} class="brightness-0 invert" />
+            <span style="font-size:16px; font-weight:700; color:white;">Description</span>
+          </div>
+          <div style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); padding:16px 20px;">
+            <textarea id="s1-desc" placeholder="Décris t'a soirée en quelque mots..." rows="6"
+              style="background:transparent; width:100%; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e; resize:none;"
+              class="placeholder-neutral-500"></textarea>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="flex justify-end mt-10">
+        <button id="btn-next-1" style="background:#347645; height:60px; width:237px; color:white; font-size:16px; font-weight:500; border:none; cursor:pointer;">Continuer</button>
+      </div>
+    </div>
+
+    <!-- ─── STEP 2: Bars ─── -->
+    <div id="panel-2" class="flex flex-col px-5 lg:px-17.5 py-10 lg:py-14" style="display:none; min-height: calc(100vh - 92px);">
+      <h3 class="text-white m-0 mb-7" style="font-size:25px; font-weight:500; letter-spacing:-1px;">Creer son barathon</h3>
+
+      <!-- Search + Favoris -->
+      <div class="flex gap-3 mb-5">
+        <div class="flex items-center gap-3 flex-1 px-4" style="background:#f7f1ed; height:52px; border-radius:2px;">
+          <Image src={searchIcon} alt="" width={20} height={20} style="filter:invert(41%) sepia(6%) saturate(228%) hue-rotate(314deg) brightness(95%) contrast(88%)" />
+          <input id="search-bars" type="text" placeholder="Rechercher un bar ..."
+            style="background:transparent; flex:1; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e;"
+            class="placeholder-neutral-500" />
+        </div>
+        <button id="btn-favoris-bars" style="background:#347645; height:52px; padding:0 16px; color:white; font-size:14px; font-weight:500; border:none; cursor:pointer; border-radius:2px; white-space:nowrap; flex-shrink:0;">Favoris</button>
+      </div>
+
+      <div id="bars-list" class="flex flex-col gap-2.5 flex-1"></div>
+
+      <!-- Selected summary -->
+      <div id="bars-summary-box" class="mt-5 p-4 rounded-5px" style="display:none; background:white; border:2px solid #dfdfdf;">
+        <p id="bars-count" style="color:#1e1e1e; font-size:14px; font-weight:500; margin:0;">Bars sélectionnés : 0</p>
+        <p id="bars-names" style="color:#646262; font-size:14px; font-weight:500; margin:4px 0 0;"></p>
+      </div>
+
+      <div class="flex items-center gap-3 mt-5">
+        <button onclick="goToStep(1)" style="flex:1; height:60px; color:white; font-size:16px; font-weight:500; border:2px solid white; background:transparent; cursor:pointer;">Retour</button>
+        <button onclick="goToStep(3)" style="flex:1; background:#347645; height:60px; color:white; font-size:16px; font-weight:500; border:none; cursor:pointer;">Continuer</button>
+      </div>
+    </div>
+
+    <!-- ─── STEP 3: Jeux ─── -->
+    <div id="panel-3" class="flex flex-col px-5 lg:px-17.5 py-10 lg:py-14" style="display:none; min-height: calc(100vh - 92px);">
+      <h3 class="text-white m-0 mb-7" style="font-size:25px; font-weight:500; letter-spacing:-1px;">Creer son barathon</h3>
+
+      <!-- Search + Favoris -->
+      <div class="flex gap-3 mb-5">
+        <div class="flex items-center gap-3 flex-1 px-4" style="background:#f7f1ed; height:52px; border-radius:2px;">
+          <Image src={searchIcon} alt="" width={20} height={20} style="filter:invert(41%) sepia(6%) saturate(228%) hue-rotate(314deg) brightness(95%) contrast(88%)" />
+          <input id="search-jeux" type="text" placeholder="Rechercher des jeux ..."
+            style="background:transparent; flex:1; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e;"
+            class="placeholder-neutral-500" />
+        </div>
+        <button style="background:#347645; height:52px; padding:0 16px; color:white; font-size:14px; font-weight:500; border:none; cursor:pointer; border-radius:2px; white-space:nowrap; flex-shrink:0;">Favoris</button>
+      </div>
+
+      <div id="jeux-list" class="flex flex-col gap-2.5 flex-1"></div>
+
+      <!-- Selected summary -->
+      <div id="jeux-summary-box" class="mt-5 p-4 rounded-5px" style="display:none; background:white; border:2px solid #dfdfdf;">
+        <p id="jeux-count" style="color:#1e1e1e; font-size:14px; font-weight:500; margin:0;">Jeux sélectionnés : 0</p>
+        <p id="jeux-names" style="color:#646262; font-size:14px; font-weight:500; margin:4px 0 0;"></p>
+      </div>
+
+      <div class="flex items-center gap-3 mt-5">
+        <button onclick="goToStep(2)" style="flex:1; height:60px; color:white; font-size:16px; font-weight:500; border:2px solid white; background:transparent; cursor:pointer;">Retour</button>
+        <button onclick="goToStep(4)" style="flex:1; background:#347645; height:60px; color:white; font-size:16px; font-weight:500; border:none; cursor:pointer;">Continuer</button>
+      </div>
+    </div>
+
+    <!-- ─── STEP 4: Amis ─── -->
+    <div id="panel-4" class="flex flex-col px-5 lg:px-17.5 py-10 lg:py-14" style="display:none; min-height: calc(100vh - 92px);">
+      <h3 class="text-white m-0 mb-7" style="font-size:25px; font-weight:500; letter-spacing:-1px;">Creer son barathon</h3>
+
+      <!-- Search -->
+      <div class="flex items-center gap-3 mb-5 px-4" style="background:#f7f1ed; height:52px; border-radius:2px;">
+        <Image src={searchIcon} alt="" width={20} height={20} style="filter:invert(41%) sepia(6%) saturate(228%) hue-rotate(314deg) brightness(95%) contrast(88%)" />
+        <input id="search-users" type="text" placeholder="Rechercher des participants ..."
+          style="background:transparent; flex:1; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e;"
+          class="placeholder-neutral-500" />
+      </div>
+
+      <div id="users-list" class="flex flex-col gap-2.5 flex-1"></div>
+
+      <!-- Selected summary -->
+      <div id="users-summary-box" class="mt-5 p-4 rounded-5px" style="display:none; background:white; border:2px solid #dfdfdf;">
+        <p id="users-count" style="color:#1e1e1e; font-size:14px; font-weight:500; margin:0;">Amis sélectionnés : 0</p>
+        <p id="users-names" style="color:#646262; font-size:14px; font-weight:500; margin:4px 0 0;"></p>
+      </div>
+
+      <div class="flex items-center gap-3 mt-5">
+        <button onclick="goToStep(3)" style="flex:1; height:60px; color:white; font-size:16px; font-weight:500; border:2px solid white; background:transparent; cursor:pointer;">Retour</button>
+        <button id="btn-lancer" style="flex:1; background:#347645; height:60px; color:white; font-size:16px; font-weight:700; border:none; cursor:pointer;">Lancer</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<style>
+  #step-view button {
+    transition: filter 0.15s ease, transform 0.15s ease;
+  }
+  #step-view button:hover {
+    filter: brightness(1.15);
+  }
+  #step-view button:active {
+    transform: scale(0.97);
+  }
+</style>
+
+<!-- Error toast -->
+<div id="error-toast" style="display:none; position:fixed; bottom:32px; left:50%; transform:translateX(-50%); background:#c0392b; color:white; font-size:14px; font-weight:500; padding:14px 28px; border-radius:5px; z-index:100;"></div>
+
+<!-- JSON data -->
+<script id="app-data" type="application/json" set:html={appData}></script>
+
+<script>
+  import '../../js/session-creer.js';
+</script>
+
+
+</Layout>

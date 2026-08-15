@@ -1,0 +1,42 @@
+---
+// @ts-nocheck
+const { page, totalPages, currentUrl } = Astro.props;
+
+function pageUrl(p) {
+  const u = new URL(currentUrl);
+  u.searchParams.set('page', String(p));
+  return u.pathname + u.search;
+}
+---
+
+{totalPages > 1 && (
+  <div class="bg-neutral-300 h-62 flex items-center justify-center gap-15">
+
+    {page > 1 ? (
+      <a href={pageUrl(page - 1)}
+        class="bg-neutral-800 h-15 w-46.75 flex items-center justify-center text-white text-4 font-medium rounded-1.25 hover:opacity-90 transition-opacity no-underline">
+        Précédent
+      </a>
+    ) : (
+      <div class="h-15 w-46.75"></div>
+    )}
+
+    <div class="flex items-center gap-2">
+      {page > 1 && <span class="text-6.25 font-medium text-neutral-500">&lt;</span>}
+      {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+        <a href={pageUrl(p)} class={`text-6.25 font-medium no-underline ${p === page ? 'text-black font-extrabold' : 'text-neutral-500'}`}>{p}.</a>
+      ))}
+      {page < totalPages && <span class="text-6.25 font-medium text-neutral-500">&gt;</span>}
+    </div>
+
+    {page < totalPages ? (
+      <a href={pageUrl(page + 1)}
+        class="bg-primary-600 h-15 w-46.75 flex items-center justify-center text-white text-4 font-medium rounded-1.25 hover:opacity-90 transition-opacity no-underline">
+        Suivant
+      </a>
+    ) : (
+      <div class="h-15 w-46.75"></div>
+    )}
+
+  </div>
+)}

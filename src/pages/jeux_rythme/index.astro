@@ -1,0 +1,148 @@
+---
+// @ts-nocheck
+import Layout from '../../layouts/Layout.astro';
+
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+if (!token || !userId) return Astro.redirect('/connexion');
+
+const sessionId = Astro.url.searchParams.get('session') ?? '';
+
+const difficultyOptions = [
+  { value: 'facile',    label: 'Facile',    detail: 'Blocs lents · espacement large' },
+  { value: 'moyen',     label: 'Moyen',     detail: 'Vitesse et densité moyennes' },
+  { value: 'difficile', label: 'Difficile', detail: 'Blocs rapides · rafales fréquentes' },
+];
+
+const steps = [
+  'L\'écran est divisé en 4 couloirs verticaux.',
+  'Des blocs apparaissent en haut et descendent vers le bas.',
+  'Cliquez (ou tapez A Z E R) le couloir correspondant quand le bloc touche la ligne de frappe.',
+  'Plus votre timing est précis, plus vous marquez de points.',
+  'Enchaînez les frappes pour activer le multiplicateur combo (×1.5 → ×2.5).',
+];
+---
+
+<Layout title="Rythme — Bargo">
+
+  <!-- HERO -->
+  <section class="bg-primary-900 h-70 lg:h-112.5 relative overflow-hidden">
+    <h1 class="absolute top-15 left-5 lg:top-35.25 lg:left-20 text-white m-0 uppercase text-10 lg:text-22.5">Rythme</h1>
+    <p class="block lg:hidden absolute bottom-6 left-5 right-5 text-neutral-300 text-3.5 font-medium m-0 leading-snug">
+      Les blocs tombent — frappez au bon moment !
+    </p>
+    <p class="hidden lg:block absolute top-67 left-20 text-neutral-200 text-3.5 font-medium w-136.75 m-0 leading-relaxed">
+      Testez votre sens du rythme et vos réflexes.<br />
+      Plus votre timing est précis, plus vous marquez de points.
+    </p>
+  </section>
+
+  <!-- CONTENU -->
+  <div class="bg-neutral-200 px-4 lg:px-20 py-10 lg:py-20">
+    <div class="max-w-360 mx-auto">
+      <div class="flex flex-col lg:flex-row gap-10 lg:gap-20">
+
+        <!-- Gauche : règles + points -->
+        <div class="lg:w-1/2">
+          <h2 class="m-0 mb-6 text-black">Comment jouer</h2>
+
+          <div class="flex flex-col gap-5 mb-8">
+            {steps.map((rule, i) => (
+              <div class="flex gap-4 items-start">
+                <span class="w-8 h-8 rounded-full bg-primary-900 text-white flex items-center justify-center text-4 font-bold shrink-0">{i + 1}</span>
+                <p class="m-0 text-black text-4 font-medium leading-normal">{rule}</p>
+              </div>
+            ))}
+          </div>
+
+          <!-- Points -->
+          <div class="bg-neutral-800 rounded-0.5 p-6">
+            <h3 class="text-white m-0 mb-1">Points à gagner</h3>
+            <p class="m-0 mb-4 text-neutral-300 text-3.5 font-medium opacity-70">
+              Chaque frappe est notée selon votre précision.
+            </p>
+            <div class="flex flex-col gap-2 mb-4">
+              {[
+                { label: 'PERFECT  (centre de la zone)',   pts: '100 % des pts de base' },
+                { label: 'GOOD     (dans la zone)',        pts: '50–99 %' },
+                { label: 'OK       (bord de la zone)',     pts: '10–49 %' },
+                { label: 'Miss     (bloc raté)',           pts: '0 pt' },
+              ].map(row => (
+                <div class="flex items-center justify-between gap-4">
+                  <p class="m-0 text-neutral-200 text-3.5 font-medium">{row.label}</p>
+                  <span class="text-primary-500 text-4 font-bold">{row.pts}</span>
+                </div>
+              ))}
+            </div>
+            <div class="border-t border-neutral-700 pt-3 flex flex-col gap-2">
+              {[
+                { label: 'Combo ×1.5  (5 frappes)',  pts: '+50 %' },
+                { label: 'Combo ×2    (10 frappes)', pts: '+100 %' },
+                { label: 'Combo ×2.5  (20 frappes)', pts: '+150 %' },
+              ].map(row => (
+                <div class="flex items-center justify-between gap-4">
+                  <p class="m-0 text-neutral-200 text-3.5 font-medium">{row.label}</p>
+                  <span class="text-primary-500 text-4 font-bold">{row.pts}</span>
+                </div>
+              ))}
+            </div>
+            <p class="m-0 mt-3 text-neutral-300 text-3 font-medium opacity-50">Les points sont attribués uniquement pendant une session.</p>
+          </div>
+        </div>
+
+        <!-- Droite : paramètres + lancer -->
+        <div class="lg:w-1/2">
+          <form id="rythme-form">
+
+            <div class="mb-10">
+              <h3 class="m-0 mb-4 text-black">Difficulté</h3>
+              <div class="flex flex-col gap-3">
+                {difficultyOptions.map((opt, i) => (
+                  <label class="cursor-pointer">
+                    <input type="radio" name="difficulty" value={opt.value} class="peer sr-only" checked={i === 0} />
+                    <span class="peer-checked:bg-neutral-800 peer-checked:text-white text-black block px-5 py-3 border-2 border-neutral-800 rounded-0.5 transition-colors">
+                      <span class="text-4 font-medium block">{opt.label}</span>
+                      <span class="text-3 font-medium block mt-0.5 opacity-60">{opt.detail}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <!-- Contrôles desktop -->
+            <div class="mb-10 bg-white rounded-0.5 p-5 border border-neutral-300">
+              <p class="m-0 mb-3 text-neutral-500 text-3.5 font-medium uppercase tracking-widest">Clavier (desktop)</p>
+              <div class="flex gap-3">
+                {['A', 'Z'].map(k => (
+                  <div class="flex-1 h-10 bg-neutral-800 text-white flex items-center justify-center text-4 font-bold rounded-0.5">
+                    {k}
+                  </div>
+                ))}
+              </div>
+              <p class="m-0 mt-2 text-neutral-500 text-3 font-medium">Ou tapez les deux zones en bas de l'écran (gauche / droite).</p>
+            </div>
+
+            <button type="submit"
+              class="w-full lg:w-auto px-12 h-14 bg-neutral-800 text-white text-4 font-medium hover:opacity-90 transition-opacity cursor-pointer border-0">
+              Lancer le jeu
+            </button>
+
+          </form>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script is:inline define:vars={{ sessionId }}>
+    document.getElementById('rythme-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var data = new FormData(this);
+      var difficulty = data.get('difficulty') || 'facile';
+      var url = '/jeux_rythme/jouer?difficulty=' + difficulty;
+      if (sessionId) url += '&session=' + sessionId;
+      window.location.href = url;
+    });
+  </script>
+
+</Layout>

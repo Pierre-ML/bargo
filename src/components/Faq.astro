@@ -1,0 +1,55 @@
+---
+const items = [
+  {
+    question: "Qu'est-ce qu'un barathon ?",
+    answer: "Un barathon est une tournée organisée de bars entre amis, structurée avec un itinéraire, des défis et un esprit d'équipe. BARGO vous permet de tout organiser simplement."
+  },
+  {
+    question: "Comment créer un barathon ?",
+    answer: "Créez votre compte, formez votre groupe, sélectionnez les bars de votre itinéraire et lancez la session. C'est tout !"
+  },
+  {
+    question: "Faut-il payer pour utiliser BARGO ?",
+    answer: "Non, BARGO est gratuit pour les utilisateurs. Certaines fonctionnalités premium peuvent être disponibles à l'avenir."
+  },
+  {
+    question: "Comment inviter mes amis ?",
+    answer: "Depuis votre espace, vous pouvez inviter vos amis par lien ou par email directement depuis l'interface."
+  },
+  {
+    question: "Peut-on modifier l'itinéraire en cours de soirée ?",
+    answer: "Oui, l'organisateur peut ajuster l'itinéraire en temps réel selon les envies du groupe."
+  },
+  {
+    question: "Comment fonctionne le système de jeux ?",
+    answer: "Des défis sont proposés automatiquement à chaque étape du barathon. Les joueurs peuvent les accepter ou les passer selon les règles choisies en début de session."
+  },
+  {
+    question: "Mes données sont-elles protégées ?",
+    answer: "Oui, vos données sont hébergées de manière sécurisée et ne sont jamais revendues. Consultez nos mentions légales pour plus d'informations."
+  }
+];
+---
+
+<section class="bg-neutral-800 py-10 lg:py-20 w-full" id="faq">
+  <div class="max-w-360 mx-auto px-4 lg:px-20">
+    <h2 class="text-white mb-8 lg:mb-16 m-0 text-10 lg:text-22.5">FAQ</h2>
+    <div class="lg:ml-[calc(33.33%+38px)]">
+      {items.map((item) => (
+        <details class="faq-item border-b border-neutral-300/30 first:border-t first:border-neutral-300/30">
+          <summary class="flex items-center justify-between py-5 font-medium text-4 leading-snug text-neutral-300 cursor-pointer list-none gap-5 select-none">
+            <span>{item.question}</span>
+            <span class="faq-icon shrink-0 text-neutral-300 text-xl leading-none transition-transform duration-200">+</span>
+          </summary>
+          <p class="font-medium text-3.5 leading-snug text-neutral-500 m-0 pb-5 pr-2 lg:pr-10">
+            {item.answer}
+          </p>
+        </details>
+      ))}
+    </div>
+  </div>
+</section>
+
+<script>
+  import '../js/faq.js';
+</script>

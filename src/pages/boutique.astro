@@ -1,0 +1,619 @@
+---
+// @ts-nocheck
+import Layout from '../layouts/Layout.astro';
+import PbImage from '../components/PbImage.astro';
+import LikeButton from '../components/LikeButton.astro';
+import Pagination from '../components/Pagination.astro';
+import HeroSection from '../components/HeroSection.astro';
+import likeIcon     from '../assets/icon/like.svg';
+import likeFillIcon from '../assets/icon/like_fill.svg';
+
+const PB_URL = 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr';
+
+const page      = parseInt(Astro.url.searchParams.get('page') ?? '1');
+const activeTab = Astro.url.searchParams.get('tab') ?? 'decoration_avatar';
+const perPage   = 12;
+
+const filter = encodeURIComponent(`type="${activeTab}"`);
+const res  = await fetch(`${PB_URL}/api/collections/boutique/records?page=${page}&perPage=${perPage}&sort=created&filter=${filter}`);
+const data = await res.json();
+const produits   = data.items ?? [];
+const totalPages = Math.ceil((data.totalItems ?? 0) / perPage);
+
+// Auth + user data
+const userId = Astro.cookies.get('pb_user_id')?.value;
+const token  = Astro.cookies.get('pb_token')?.value;
+const isAuth = !!(userId && token);
+
+let userPoints       = null;
+let userItemsFavori  = [];
+let possedDecoration = [];
+let possedTitre      = [];
+let possedTheme      = [];
+let equipedDecoration = null;
+let equipedTitre      = null;
+let equipedTheme      = null;
+
+if (isAuth) {
+  const userRes = await fetch(`${PB_URL}/api/collections/users/records/${userId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (userRes.ok) {
+    const user = await userRes.json();
+    userPoints        = user.points ?? 0;
+    userItemsFavori   = Array.isArray(user.items_favori)            ? user.items_favori            : [];
+    possedDecoration  = Array.isArray(user.possed_avatar_decoration) ? user.possed_avatar_decoration : [];
+    possedTitre       = Array.isArray(user.possed_titre)             ? user.possed_titre             : [];
+    possedTheme       = Array.isArray(user.possed_theme)             ? user.possed_theme             : [];
+    equipedDecoration = user.equiper_avatar_decoration ?? null;
+    equipedTitre      = user.equiper_titre             ?? null;
+    equipedTheme      = user.equiper_theme             ?? null;
+  }
+}
+
+const tabs = [
+  { id: 'decoration_avatar', label: 'Décoration avatar' },
+  { id: 'theme',             label: 'Thème du profil' },
+  { id: 'titre',             label: 'Titre' },
+];
+
+function getImageFile(produit) {
+  if (produit.type === 'decoration_avatar') return produit.type_decoration_avatar ?? null;
+  if (produit.type === 'theme')             return produit.type_them              ?? null;
+  return null;
+}
+
+// 'equipe' | 'equiper' | 'acheter' | 'insuffisant' | 'connexion'
+function getButtonState(produit) {
+  if (!isAuth) return 'connexion';
+  const possed   = produit.type === 'decoration_avatar' ? possedDecoration :
+                   produit.type === 'theme'              ? possedTheme      : possedTitre;
+  const equipped = produit.type === 'decoration_avatar' ? equipedDecoration :
+                   produit.type === 'theme'              ? equipedTheme      : equipedTitre;
+  if (equipped === produit.id)         return 'equipe';
+  if (possed.includes(produit.id))     return 'equiper';
+  if ((userPoints ?? 0) >= produit.prix) return 'acheter';
+  return 'insuffisant';
+}
+---
+
+<Layout title="Boutique — Bargo">
+
+  <HeroSection title="Boutique" descMobile="Débloquez des avatars, des thèmes et des titres exclusifs grâce à vos points de barathon.">
+    Personnalisez votre profil et affirmez votre style au sein du groupe. Débloquez des avatars,
+    des cadres et des thèmes exclusifs grâce à votre participation et à vos succès.
+    Plus vous prenez part aux barathons, plus votre profil évolue.
+  </HeroSection>
+
+  <!-- ===== CONTENU BEIGE ===== -->
+  <div class="bg-neutral-200">
+
+    <!-- Tab bar -->
+    <div class="pt-5.75">
+      <div class="border-b-2 border-neutral-350 shadow-md">
+        <div class="lg:px-20 flex items-center justify-between h-14 lg:h-13">
+
+          <!-- Onglets -->
+          <div id="tab-list" class="relative flex items-center flex-1 lg:flex-none h-full overflow-x-auto">
+            {tabs.map(tab => (
+              <button
+                data-tab={tab.id}
+                class={`tab-btn flex-1 lg:flex-none flex items-center justify-center lg:px-6.25 h-full text-3.5 lg:text-4 font-medium text-black bg-transparent border-0 cursor-pointer whitespace-nowrap`}
+              >
+                {tab.label}
+              </button>
+            ))}
+            <div id="tab-indicator" class="absolute bottom-0 h-1.5 rounded-full" style="background:#72c073; transition: left 0.3s cubic-bezier(.4,0,.2,1), width 0.3s cubic-bezier(.4,0,.2,1); left:0; width:0;"></div>
+          </div>
+
+          <!-- Points utilisateur -->
+          {userPoints !== null && (
+            <div class="flex items-center gap-2 lg:gap-3 shrink-0 px-3 lg:px-0 lg:ml-4">
+              <span class="hidden lg:block text-black text-4 font-medium">Vos points :</span>
+              <h3 id="user-points-display" class="m-0 text-black text-3.5 lg:text-6.25">{userPoints} pts</h3>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Grille de produits -->
+    <div id="boutique-wrap" class="px-4 lg:px-20 pt-8 lg:pt-23 pb-8 lg:pb-20">
+      {produits.length > 0 ? (
+        <div id="boutique-grid" class="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-8">
+          {produits.map(produit => {
+            const imageFile = getImageFile(produit);
+            const state     = getButtonState(produit);
+
+            const btnLabel = state === 'equipe'       ? 'Équipé'     :
+                             state === 'equiper'      ? 'Équiper'    :
+                             state === 'acheter'      ? `Acheter — ${produit.prix} pts` :
+                             state === 'insuffisant'  ? `${produit.prix} pts requis` :
+                                                        'Se connecter';
+
+            const btnClass   = state === 'equipe'      ? 'bg-primary-600 cursor-default' :
+                               state === 'equiper'     ? 'bg-primary-900 cursor-pointer hover:opacity-90' :
+                               state === 'acheter'     ? 'bg-neutral-800 cursor-pointer hover:opacity-90' :
+                               state === 'insuffisant' ? 'bg-neutral-300 cursor-not-allowed' :
+                                                         'bg-neutral-800 cursor-pointer hover:opacity-90';
+            const btnDisabled = state === 'equipe' || state === 'insuffisant';
+
+            return (
+              <div>
+                <!-- MOBILE -->
+                <div class="block lg:hidden bg-white rounded-0.5 shadow-md overflow-hidden">
+                  <div class="h-40 bg-neutral-500 flex items-center justify-center">
+                    {produit.type === 'titre' ? (
+                      <div class="flex items-center justify-center px-4">
+                        <p class="text-white font-bold text-5 text-center m-0">{produit.type_titre ?? produit.nom}</p>
+                      </div>
+                    ) : imageFile ? (
+                      <div class="size-27.5 rounded-full overflow-hidden">
+                        <PbImage record={produit} recordImage={imageFile} width={150} height={150} />
+                      </div>
+                    ) : (
+                      <div class="size-27.5 rounded-full bg-neutral-600"></div>
+                    )}
+                  </div>
+                  <div class="p-4">
+                    <div class="flex items-center justify-between mb-3">
+                      <h3 class="m-0 text-black text-sm">{produit.nom}</h3>
+                      {isAuth && (
+                        <LikeButton id={produit.id} liked={userItemsFavori.includes(produit.id)} variant="item" class="p-0 border-0 bg-transparent cursor-pointer" ariaLabel="Favori" />
+                      )}
+                    </div>
+                    {state === 'connexion' ? (
+                      <a href="/connexion" class="w-full h-12 bg-neutral-800 flex items-center justify-center hover:opacity-90 transition-opacity no-underline">
+                        <span class="text-white text-3.5 font-medium">Se connecter</span>
+                      </a>
+                    ) : (
+                      <button
+                        type="button"
+                        class={`boutique-action-btn w-full h-12 flex items-center justify-center transition-opacity border-0 text-white text-3.5 font-medium ${btnClass}`}
+                        data-item-id={produit.id}
+                        data-item-type={produit.type}
+                        data-item-prix={produit.prix}
+                        data-state={state}
+                        disabled={btnDisabled}
+                      >
+                        {btnLabel}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <!-- DESKTOP -->
+                <div class="hidden lg:block h-91.75 rounded-0.5 shadow-md relative overflow-hidden bg-neutral-500">
+                  <div class="absolute bottom-0 left-0 right-0 h-35.75 bg-white rounded-bl-0.5 rounded-br-0.5"></div>
+
+                  {produit.type === 'titre' ? (
+                    <div class="absolute top-10.5 left-1/2 -translate-x-1/2 w-37.5 h-37.5 rounded-full bg-neutral-600 flex items-center justify-center px-3">
+                      <p class="text-white font-bold text-5 text-center m-0 leading-snug">{produit.type_titre ?? produit.nom}</p>
+                    </div>
+                  ) : imageFile ? (
+                    <div class="absolute top-10.5 left-1/2 -translate-x-1/2 size-37.5 rounded-full overflow-hidden">
+                      <PbImage record={produit} recordImage={imageFile} width={150} height={150} />
+                    </div>
+                  ) : (
+                    <div class="absolute top-10.5 left-1/2 -translate-x-1/2 size-37.5 rounded-full bg-neutral-600"></div>
+                  )}
+
+                  <div class="absolute top-59.75 left-7.25 right-6.75 flex items-center justify-between">
+                    <h3 class="m-0 text-black text-5 truncate">{produit.nom}</h3>
+                    {isAuth && (
+                      <LikeButton id={produit.id} liked={userItemsFavori.includes(produit.id)} variant="item" class="p-0 border-0 bg-transparent cursor-pointer shrink-0" ariaLabel="Favori" />
+                    )}
+                  </div>
+
+                  {state === 'connexion' ? (
+                    <a href="/connexion" class="absolute top-73.75 bottom-3 left-7.25 right-7.5 bg-neutral-800 flex items-center justify-center hover:opacity-90 transition-opacity no-underline">
+                      <span class="text-white text-4 font-medium">Se connecter</span>
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      class={`boutique-action-btn absolute top-73.75 bottom-3 left-7.25 right-7.5 flex items-center justify-center transition-opacity border-0 text-white text-4 font-medium ${btnClass}`}
+                      data-item-id={produit.id}
+                      data-item-type={produit.type}
+                      data-item-prix={produit.prix}
+                      data-state={state}
+                      disabled={btnDisabled}
+                    >
+                      {btnLabel}
+                    </button>
+                  )}
+                </div>
+
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p id="boutique-empty" class="text-neutral-500 text-4 font-medium">Aucun article disponible pour l'instant.</p>
+      )}
+    </div>
+
+    <!-- Pagination -->
+    <Pagination page={page} totalPages={totalPages} currentUrl={Astro.url.href} />
+
+  </div>
+
+  <!-- Toast feedback -->
+  <div id="boutique-toast" style="position:fixed; bottom:100px; left:50%; transform:translateX(-50%) translateY(20px); background:#1E1E1E; color:white; padding:12px 24px; border-radius:8px; font-size:14px; font-family:'Inter',sans-serif; font-weight:500; opacity:0; transition:opacity 0.25s,transform 0.25s; pointer-events:none; z-index:300; white-space:nowrap;"></div>
+
+  <script is:inline define:vars={{ token, userId, isAuth, PB_URL, perPage, activeTab,
+    possedDecoration, possedTitre, possedTheme,
+    equipedDecoration, equipedTitre, equipedTheme,
+    userPoints,
+    likeIconSrc: likeIcon.src, likeFillIconSrc: likeFillIcon.src }}>
+(function () {
+
+  // ── LIKE (items_favori) ──────────────────────────────────────────────────────
+  var favs = { items_favori: [] };
+
+  function toggleLike(field, itemId, emptyEl, filledEl) {
+    var current = favs[field] || [];
+    var idx     = current.indexOf(itemId);
+    var updated;
+    if (idx >= 0) {
+      updated = current.filter(function (id) { return id !== itemId; });
+      emptyEl  && emptyEl.classList.remove('hidden');
+      filledEl && filledEl.classList.add('hidden');
+    } else {
+      updated = current.concat([itemId]);
+      emptyEl  && emptyEl.classList.add('hidden');
+      filledEl && filledEl.classList.remove('hidden');
+    }
+    favs[field] = updated;
+    if (!token || !userId) return;
+    var body = {};
+    body[field] = updated;
+    fetch(PB_URL + '/api/collections/users/records/' + userId, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body:    JSON.stringify(body),
+    }).catch(function () {
+      favs[field] = current;
+      if (idx >= 0) {
+        emptyEl  && emptyEl.classList.add('hidden');
+        filledEl && filledEl.classList.remove('hidden');
+      } else {
+        emptyEl  && emptyEl.classList.remove('hidden');
+        filledEl && filledEl.classList.add('hidden');
+      }
+    });
+  }
+
+  function initBtns() {
+    document.querySelectorAll('.like-btn-item').forEach(function (btn) {
+      var id       = btn.dataset.id;
+      var emptyEl  = btn.querySelector('.like-empty');
+      var filledEl = btn.querySelector('.like-filled');
+      if (favs.items_favori.indexOf(id) >= 0) {
+        emptyEl  && emptyEl.classList.add('hidden');
+        filledEl && filledEl.classList.remove('hidden');
+      }
+      btn.addEventListener('click', function () {
+        toggleLike('items_favori', id, emptyEl, filledEl);
+      });
+    });
+  }
+
+  if (token && userId) {
+    fetch(PB_URL + '/api/collections/users/records/' + userId, {
+      headers: { Authorization: 'Bearer ' + token },
+    })
+    .then(function (r) { return r.ok ? r.json() : {}; })
+    .then(function (user) {
+      favs.items_favori = Array.isArray(user.items_favori) ? user.items_favori : [];
+      initBtns();
+    })
+    .catch(initBtns);
+  } else {
+    initBtns();
+  }
+
+  // ── BOUTIQUE TABS ────────────────────────────────────────────────────────────
+  var state = {
+    points:   userPoints || 0,
+    possed:   { decoration_avatar: possedDecoration || [], titre: possedTitre || [], theme: possedTheme || [] },
+    equipped: { decoration_avatar: equipedDecoration || null, titre: equipedTitre || null, theme: equipedTheme || null },
+  };
+
+  var currentTab = activeTab;
+
+  var POSSED_FIELD  = { decoration_avatar: 'possed_avatar_decoration', titre: 'possed_titre', theme: 'possed_theme' };
+  var EQUIP_FIELD   = { decoration_avatar: 'equiper_avatar_decoration', titre: 'equiper_titre', theme: 'equiper_theme' };
+
+  function showToast(msg, ok) {
+    var t = document.getElementById('boutique-toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.style.background = ok ? '#094736' : '#b91c1c';
+    t.style.opacity    = '1';
+    t.style.transform  = 'translateX(-50%) translateY(0)';
+    setTimeout(function () {
+      t.style.opacity   = '0';
+      t.style.transform = 'translateX(-50%) translateY(20px)';
+    }, 2800);
+  }
+
+  function getState(itemId, itemType, prix) {
+    if (!isAuth) return 'connexion';
+    if (state.equipped[itemType] === itemId)            return 'equipe';
+    if ((state.possed[itemType] || []).includes(itemId)) return 'equiper';
+    if (state.points >= prix)                           return 'acheter';
+    return 'insuffisant';
+  }
+
+  function applyBtnState(btn, s, prix) {
+    var labels = {
+      equipe:      'Équipé',
+      equiper:     'Équiper',
+      acheter:     'Acheter — ' + prix + ' pts',
+      insuffisant: prix + ' pts requis',
+    };
+    var classes = {
+      equipe:      'bg-primary-600 cursor-default',
+      equiper:     'bg-primary-900 cursor-pointer hover:opacity-90',
+      acheter:     'bg-neutral-800 cursor-pointer hover:opacity-90',
+      insuffisant: 'bg-neutral-300 cursor-not-allowed',
+    };
+    btn.textContent = labels[s] || labels.acheter;
+    btn.disabled    = (s === 'equipe' || s === 'insuffisant');
+    btn.dataset.state = s;
+    ['bg-primary-600','bg-primary-900','bg-neutral-800','bg-neutral-300',
+     'cursor-default','cursor-pointer','cursor-not-allowed','hover:opacity-90'].forEach(function (c) {
+      btn.classList.remove(c);
+    });
+    (classes[s] || classes.acheter).split(' ').forEach(function (c) { btn.classList.add(c); });
+  }
+
+  async function buyItem(btn) {
+    var itemId   = btn.dataset.itemId;
+    var itemType = btn.dataset.itemType;
+    var prix     = parseInt(btn.dataset.itemPrix, 10);
+    var field    = POSSED_FIELD[itemType];
+    if (!field || state.points < prix) return;
+    btn.disabled    = true;
+    btn.textContent = '...';
+    var newPossed = (state.possed[itemType] || []).concat([itemId]);
+    var newPoints = state.points - prix;
+    try {
+      var res = await fetch(PB_URL + '/api/collections/users/records/' + userId, {
+        method:  'PATCH',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ [field]: newPossed, points: newPoints }),
+      });
+      if (!res.ok) throw new Error();
+      state.possed[itemType] = newPossed;
+      state.points = newPoints;
+      var ptEl = document.getElementById('user-points-display');
+      if (ptEl) ptEl.textContent = newPoints + ' pts';
+      document.querySelectorAll('.boutique-action-btn[data-item-id="' + itemId + '"]').forEach(function (b) {
+        applyBtnState(b, 'equiper', prix);
+      });
+      showToast('Achat réussi ! Vous pouvez maintenant équiper cet article.', true);
+    } catch {
+      applyBtnState(btn, getState(itemId, itemType, prix), prix);
+      showToast('Erreur lors de l\'achat. Réessayez.', false);
+    }
+  }
+
+  async function equipItem(btn) {
+    var itemId   = btn.dataset.itemId;
+    var itemType = btn.dataset.itemType;
+    var prix     = parseInt(btn.dataset.itemPrix, 10);
+    var field    = EQUIP_FIELD[itemType];
+    if (!field) return;
+    btn.disabled    = true;
+    btn.textContent = '...';
+    try {
+      var res = await fetch(PB_URL + '/api/collections/users/records/' + userId, {
+        method:  'PATCH',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ [field]: itemId }),
+      });
+      if (!res.ok) throw new Error();
+      var oldId = state.equipped[itemType];
+      if (oldId && oldId !== itemId) {
+        document.querySelectorAll('.boutique-action-btn[data-item-id="' + oldId + '"]').forEach(function (b) {
+          applyBtnState(b, 'equiper', parseInt(b.dataset.itemPrix, 10));
+        });
+      }
+      state.equipped[itemType] = itemId;
+      document.querySelectorAll('.boutique-action-btn[data-item-id="' + itemId + '"]').forEach(function (b) {
+        applyBtnState(b, 'equipe', prix);
+      });
+      showToast('Article équipé ! Votre profil a été mis à jour.', true);
+    } catch {
+      applyBtnState(btn, 'equiper', prix);
+      showToast('Erreur lors de l\'équipement. Réessayez.', false);
+    }
+  }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest('.boutique-action-btn');
+    if (!btn || !isAuth) return;
+    var s = btn.dataset.state;
+    if (s === 'acheter')  buyItem(btn);
+    if (s === 'equiper')  equipItem(btn);
+  });
+
+  function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function cardHtml(p) {
+    var imgField = p.type === 'decoration_avatar' ? p.type_decoration_avatar :
+                   p.type === 'theme'             ? p.type_them              : null;
+    var imgSrc   = imgField ? PB_URL + '/api/files/' + p.collectionName + '/' + p.id + '/' + imgField : '';
+    var prix     = p.prix || 0;
+    var s        = getState(p.id, p.type, prix);
+
+    var btnLabel = s === 'equipe'      ? 'Équipé'                     :
+                   s === 'equiper'     ? 'Équiper'                    :
+                   s === 'acheter'     ? 'Acheter — ' + prix + ' pts' :
+                   s === 'insuffisant' ? prix + ' pts requis'         : 'Se connecter';
+
+    var btnBg  = s === 'equipe'      ? 'bg-primary-600 cursor-default'          :
+                 s === 'equiper'     ? 'bg-primary-900 cursor-pointer hover:opacity-90' :
+                 s === 'acheter'     ? 'bg-neutral-800 cursor-pointer hover:opacity-90' :
+                 s === 'insuffisant' ? 'bg-neutral-300 cursor-not-allowed'      :
+                                      'bg-neutral-800 cursor-pointer hover:opacity-90';
+
+    var disabled = (s === 'equipe' || s === 'insuffisant') ? 'disabled' : '';
+    var btnAttrs = isAuth
+      ? 'class="boutique-action-btn w-full h-12 flex items-center justify-center transition-opacity border-0 text-white text-3.5 font-medium ' + btnBg + '" ' +
+        'data-item-id="' + esc(p.id) + '" data-item-type="' + esc(p.type) + '" data-item-prix="' + prix + '" data-state="' + s + '" ' + disabled
+      : 'class="w-full h-12 bg-neutral-800 flex items-center justify-center hover:opacity-90 transition-opacity border-0 text-white text-3.5 font-medium cursor-pointer"';
+
+    var circleContent = p.type === 'titre'
+      ? '<div class="size-27.5 rounded-full bg-neutral-600 flex items-center justify-center px-2"><p style="color:white;font-weight:700;font-size:16px;text-align:center;margin:0;line-height:1.3;">' + esc(p.type_titre || p.nom) + '</p></div>'
+      : imgSrc
+        ? '<div class="size-27.5 rounded-full overflow-hidden"><img src="' + imgSrc + '" style="width:100%;height:100%;object-fit:cover;" /></div>'
+        : '<div class="size-27.5 rounded-full bg-neutral-600"></div>';
+
+    var circleContentD = p.type === 'titre'
+      ? '<div class="absolute top-10.5 left-1/2 -translate-x-1/2 size-37.5 rounded-full bg-neutral-600 flex items-center justify-center px-3"><p style="color:white;font-weight:700;font-size:18px;text-align:center;margin:0;line-height:1.3;">' + esc(p.type_titre || p.nom) + '</p></div>'
+      : imgSrc
+        ? '<div class="absolute top-10.5 left-1/2 -translate-x-1/2 size-37.5 rounded-full overflow-hidden"><img src="' + imgSrc + '" style="width:100%;height:100%;object-fit:cover;" /></div>'
+        : '<div class="absolute top-10.5 left-1/2 -translate-x-1/2 size-37.5 rounded-full bg-neutral-600"></div>';
+
+    var likeHtml = isAuth
+      ? '<button class="like-btn-item p-0 border-0 bg-transparent cursor-pointer shrink-0" data-id="' + esc(p.id) + '" type="button" aria-label="Favori">' +
+          '<img src="' + likeIconSrc + '" alt="" class="like-empty size-6" />' +
+          '<img src="' + likeFillIconSrc + '" alt="" class="like-filled size-6 hidden" />' +
+        '</button>'
+      : '';
+
+    var btnMobile = isAuth
+      ? '<button type="button" ' + btnAttrs + '>' + esc(btnLabel) + '</button>'
+      : '<a href="/connexion" class="w-full h-12 bg-neutral-800 flex items-center justify-center hover:opacity-90 transition-opacity no-underline"><span class="text-white text-3.5 font-medium">Se connecter</span></a>';
+
+    var btnDesktop = isAuth
+      ? '<button type="button" class="boutique-action-btn absolute top-73.75 bottom-3 left-7.25 right-7.5 flex items-center justify-center transition-opacity border-0 text-white text-4 font-medium ' + btnBg + '" data-item-id="' + esc(p.id) + '" data-item-type="' + esc(p.type) + '" data-item-prix="' + prix + '" data-state="' + s + '" ' + disabled + '>' + esc(btnLabel) + '</button>'
+      : '<a href="/connexion" class="absolute top-73.75 bottom-3 left-7.25 right-7.5 bg-neutral-800 flex items-center justify-center hover:opacity-90 transition-opacity no-underline"><span class="text-white text-4 font-medium">Se connecter</span></a>';
+
+    return '<div>' +
+      '<div class="block lg:hidden bg-white rounded-0.5 shadow-md overflow-hidden">' +
+        '<div class="h-40 bg-neutral-500 flex items-center justify-center">' + circleContent + '</div>' +
+        '<div class="p-4">' +
+          '<div class="flex items-center justify-between mb-3">' +
+            '<h3 class="m-0 text-black text-sm">' + esc(p.nom) + '</h3>' +
+            likeHtml +
+          '</div>' +
+          btnMobile +
+        '</div>' +
+      '</div>' +
+      '<div class="hidden lg:block h-91.75 rounded-0.5 shadow-md relative overflow-hidden bg-neutral-500">' +
+        '<div class="absolute bottom-0 left-0 right-0 h-35.75 bg-white rounded-bl-0.5 rounded-br-0.5"></div>' +
+        circleContentD +
+        '<div class="absolute top-59.75 left-7.25 right-6.75 flex items-center justify-between">' +
+          '<h3 class="m-0 text-black text-5 truncate">' + esc(p.nom) + '</h3>' +
+          likeHtml +
+        '</div>' +
+        btnDesktop +
+      '</div>' +
+    '</div>';
+  }
+
+  async function loadTab(tabId) {
+    var filter = encodeURIComponent('type="' + tabId + '"');
+    var url    = PB_URL + '/api/collections/boutique/records?page=1&perPage=' + perPage + '&sort=created&filter=' + filter;
+    var res    = await fetch(url);
+    var data   = res.ok ? await res.json() : { items: [] };
+    var items  = data.items || [];
+
+    var grid  = document.getElementById('boutique-grid');
+    var empty = document.getElementById('boutique-empty');
+    var wrap  = document.getElementById('boutique-wrap');
+
+    var target = grid || empty;
+    if (target) {
+      target.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+      target.style.opacity    = '0';
+      target.style.transform  = 'translateY(8px)';
+    }
+
+    await new Promise(function (r) { setTimeout(r, 200); });
+
+    if (items.length === 0) {
+      if (grid) grid.remove();
+      if (!document.getElementById('boutique-empty')) {
+        var p = document.createElement('p');
+        p.id = 'boutique-empty';
+        p.className = 'text-neutral-500 text-4 font-medium';
+        p.textContent = 'Aucun article disponible pour l\'instant.';
+        p.style.opacity   = '0';
+        p.style.transform = 'translateY(8px)';
+        wrap.prepend(p);
+        requestAnimationFrame(function () {
+          p.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+          p.style.opacity    = '1';
+          p.style.transform  = 'translateY(0)';
+        });
+      }
+    } else {
+      if (empty) empty.remove();
+      if (!document.getElementById('boutique-grid')) {
+        var g = document.createElement('div');
+        g.id = 'boutique-grid';
+        g.className = 'grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-8';
+        wrap.prepend(g);
+        grid = g;
+      }
+      grid.innerHTML = items.map(cardHtml).join('');
+      grid.style.opacity   = '0';
+      grid.style.transform = 'translateY(8px)';
+      requestAnimationFrame(function () {
+        grid.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+        grid.style.opacity    = '1';
+        grid.style.transform  = 'translateY(0)';
+      });
+    }
+
+    initBtns();
+  }
+
+  function moveIndicator(btn) {
+    var indicator = document.getElementById('tab-indicator');
+    var list      = document.getElementById('tab-list');
+    if (!indicator || !list) return;
+    var listRect = list.getBoundingClientRect();
+    var btnRect  = btn.getBoundingClientRect();
+    indicator.style.left  = (btnRect.left - listRect.left + list.scrollLeft) + 'px';
+    indicator.style.width = btnRect.width + 'px';
+  }
+
+  var activeBtn = document.querySelector('.tab-btn[data-tab="' + currentTab + '"]');
+  if (activeBtn) moveIndicator(activeBtn);
+
+  document.querySelectorAll('.tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var tabId = btn.dataset.tab;
+      if (tabId === currentTab) return;
+      currentTab = tabId;
+      moveIndicator(btn);
+      var u = new URL(window.location.href);
+      u.searchParams.set('tab', tabId);
+      u.searchParams.set('page', '1');
+      history.pushState({}, '', u.pathname + u.search);
+      loadTab(tabId);
+    });
+  });
+})();
+  </script>
+
+<style>
+  .boutique-action-btn {
+    transition: filter 0.15s ease, transform 0.15s ease;
+  }
+  .boutique-action-btn:not(:disabled):hover {
+    filter: brightness(1.12);
+  }
+  .boutique-action-btn:not(:disabled):active {
+    transform: scale(0.97);
+  }
+</style>
+
+</Layout>

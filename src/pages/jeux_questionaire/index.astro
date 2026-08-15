@@ -1,0 +1,155 @@
+---
+// @ts-nocheck
+import Layout from '../../layouts/Layout.astro';
+
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+if (!token || !userId) return Astro.redirect('/connexion');
+
+const sessionId = Astro.url.searchParams.get('session') ?? '';
+
+const themes = [
+  { value: 'cultrue_g', label: 'Culture générale' },
+  { value: 'jeux_video', label: 'Jeux vidéo' },
+  { value: 'histoire',   label: 'Histoire' },
+];
+
+const timeOptions = [
+  { value: '10', label: '10 sec' },
+  { value: '20', label: '20 sec' },
+  { value: '30', label: '30 sec' },
+  { value: '60', label: '1 min' },
+];
+---
+
+<Layout title="Quiz Questionnaire — Bargo">
+
+  <!-- ===== HERO ===== -->
+  <section class="bg-primary-900 h-70 lg:h-112.5 relative">
+    <h1 class="absolute top-15 left-5 lg:top-35.25 lg:left-20 text-white m-0 uppercase text-10 lg:text-22.5">Quiz</h1>
+    <p class="block lg:hidden absolute bottom-6 left-5 right-5 text-neutral-300 text-3.5 font-medium m-0 leading-snug">
+      Testez vos connaissances en 10 questions. Répondez vite pour maximiser vos points !
+    </p>
+    <p class="hidden lg:block absolute top-67 left-20 text-[#F7F1ED] text-3.5 font-medium w-136.75 m-0 leading-relaxed">
+      Testez vos connaissances en répondant à 10 questions dans le thème de votre choix.
+      Répondez vite et juste pour maximiser vos points !
+    </p>
+  </section>
+
+  <!-- ===== CONTENU ===== -->
+  <div class="bg-neutral-200 px-4 lg:px-20 py-10 lg:py-20">
+    <div class="max-w-360 mx-auto">
+      <div class="flex flex-col lg:flex-row gap-10 lg:gap-20">
+
+        <!-- Colonne gauche : comment jouer + points -->
+        <div class="lg:w-1/2">
+          <h2 class="m-0 mb-6 text-black">Comment jouer</h2>
+
+          <div class="flex flex-col gap-5 mb-8">
+            {[
+              'Choisissez un ou plusieurs thèmes de questions.',
+              'Sélectionnez le temps accordé par question.',
+              'Répondez à 10 questions aléatoires. Une seule réponse est correcte.',
+              'Si le temps s\'écoule sans réponse, la question est comptée comme fausse.',
+            ].map((rule, i) => (
+              <div class="flex gap-4 items-start">
+                <span class="w-8 h-8 rounded-full bg-primary-900 text-white flex items-center justify-center text-4 font-bold shrink-0">{i + 1}</span>
+                <p class="m-0 text-black text-4 font-medium leading-normal">{rule}</p>
+              </div>
+            ))}
+          </div>
+
+          <!-- Points -->
+          <div class="bg-neutral-800 rounded-0.5 p-6">
+            <h3 class="text-white m-0 mb-1">Points à gagner</h3>
+            <p class="m-0 mb-4 text-neutral-300 text-3.5 font-medium opacity-70">Plus le temps par question est court, plus le multiplicateur est élevé.</p>
+            <div class="flex flex-col gap-2 mb-4">
+              {[
+                { label: '10 sec / question', pts: '30 pts', mult: '×3' },
+                { label: '20 sec / question', pts: '20 pts', mult: '×2' },
+                { label: '30 sec / question', pts: '15 pts', mult: '×1.5' },
+                { label: '1 min / question',  pts: '10 pts', mult: '×1' },
+              ].map(row => (
+                <div class="flex items-center justify-between gap-4">
+                  <p class="m-0 text-[#F7F1ED] text-3.5 font-medium">{row.label}</p>
+                  <div class="flex items-center gap-3 shrink-0">
+                    <span class="text-neutral-300 text-3.5 font-medium opacity-60">{row.mult}</span>
+                    <span class="text-[#72C073] text-4 font-bold">{row.pts}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div class="border-t border-neutral-700 pt-3">
+              <div class="flex items-center justify-between">
+                <p class="m-0 text-[#F7F1ED] text-3.5 font-medium">Mauvaise réponse ou temps écoulé</p>
+                <span class="text-neutral-300 text-4 font-bold shrink-0">0 pt</span>
+              </div>
+            </div>
+            <p class="m-0 mt-3 text-neutral-300 text-3 font-medium opacity-50">Le système de points sera disponible prochainement.</p>
+          </div>
+        </div>
+
+        <!-- Colonne droite : paramètres + lancer -->
+        <div class="lg:w-1/2">
+          <form id="quiz-form">
+
+            <!-- Thèmes -->
+            <div class="mb-8">
+              <h3 class="m-0 mb-4 text-black">Thème des questions</h3>
+              <div class="flex flex-wrap gap-3">
+
+                <!-- Bouton Tout -->
+                <button type="button" id="btn-all-themes"
+                  class="px-5 py-3 border-2 border-neutral-800 rounded-0.5 text-4 font-medium text-black transition-colors cursor-pointer bg-transparent hover:opacity-80">
+                  Tout
+                </button>
+
+                {themes.map(t => (
+                  <label class="cursor-pointer">
+                    <input type="checkbox" name="themes" value={t.value} class="peer sr-only" />
+                    <span class="peer-checked:bg-neutral-800 peer-checked:text-white block px-5 py-3 border-2 border-neutral-800 rounded-0.5 text-4 font-medium text-black transition-colors">
+                      {t.label}
+                    </span>
+                  </label>
+                ))}
+
+              </div>
+              <p id="theme-error" class="hidden text-red-600 text-3.5 font-medium mt-3">
+                Veuillez sélectionner au moins un thème.
+              </p>
+            </div>
+
+            <!-- Temps par question -->
+            <div class="mb-10">
+              <h3 class="m-0 mb-4 text-black">Temps par question</h3>
+              <div class="flex flex-wrap gap-3">
+                {timeOptions.map((opt, i) => (
+                  <label class="cursor-pointer">
+                    <input type="radio" name="time" value={opt.value}
+                      class="peer sr-only" checked={i === 1} />
+                    <span class="peer-checked:bg-neutral-800 peer-checked:text-white block px-5 py-3 border-2 border-neutral-800 rounded-0.5 text-4 font-medium text-black transition-colors">
+                      {opt.label}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <!-- Bouton lancer -->
+            <button type="submit"
+              class="w-full lg:w-auto px-12 h-14 bg-neutral-800 text-white text-4 font-medium hover:opacity-90 transition-opacity cursor-pointer border-0">
+              Lancer le quiz
+            </button>
+
+          </form>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import '../../js/quiz-form.js';
+  </script>
+
+</Layout>

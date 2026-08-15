@@ -1,0 +1,133 @@
+---
+// @ts-nocheck
+import Layout from '../../layouts/Layout.astro';
+import { PB_URL } from '../../../backend/backend.js';
+
+const token  = Astro.cookies.get('pb_token')?.value ?? '';
+const userId = Astro.cookies.get('pb_user_id')?.value ?? '';
+if (!token || !userId) return Astro.redirect('/connexion');
+
+const sessionId  = Astro.url.searchParams.get('session') ?? '';
+const inSession  = !!(sessionId && token && userId);
+const difficulty = Astro.url.searchParams.get('difficulty') ?? 'facile';
+const mode       = Astro.url.searchParams.get('mode') ?? 'fixe';
+
+const TOTAL_ROUNDS = 5;
+
+const timeWindows = { facile: 1000, moyen: 600, difficile: 350 };
+const maxPoints   = { facile: 100,  moyen: 200,  difficile: 300  };
+const labels      = { facile: 'Facile', moyen: 'Moyen', difficile: 'Difficile' };
+
+const timeWindow = timeWindows[difficulty] ?? 1000;
+const maxPts     = maxPoints[difficulty]   ?? 100;
+const modeBonus  = mode === 'aleatoire' ? 1.5 : 1;
+---
+
+<Layout title="Réflexe — Bargo" noFooter={true}>
+
+  <main class="h-screen bg-neutral-800 flex flex-col overflow-hidden select-none">
+
+    <!-- Top bar -->
+    <div class="flex items-center justify-between px-4 lg:px-10 py-3 lg:py-4 bg-zinc-800 border-b border-white/8 shrink-0">
+
+      <!-- Round -->
+      <div class="flex flex-col">
+        <span class="text-neutral-400 text-2.75 font-medium uppercase tracking-widest leading-none mb-0.5">Round</span>
+        <div class="flex items-baseline gap-1">
+          <span id="round-count" class="text-primary-500 font-bold text-5.5 tabular-nums leading-none">1</span>
+          <span class="text-neutral-500 text-3.5">/ {TOTAL_ROUNDS}</span>
+        </div>
+      </div>
+
+      <!-- Difficulté + mode -->
+      <div class="flex flex-col items-center">
+        <span class="text-neutral-400 text-2.75 font-medium uppercase tracking-widest leading-none mb-0.5">{labels[difficulty]}</span>
+        <span class="text-neutral-300 text-3.5 font-medium">{timeWindow} ms{mode === 'aleatoire' ? ' · Aléatoire' : ''}</span>
+      </div>
+
+      <!-- Score -->
+      <div class="flex flex-col items-end">
+        <span class="text-neutral-400 text-2.75 font-medium uppercase tracking-widest leading-none mb-0.5">Score</span>
+        <span id="score-count" class="text-white font-bold text-5.5 tabular-nums leading-none">0</span>
+      </div>
+
+    </div>
+
+    <!-- Zone de jeu -->
+    <div id="game-area" class="flex-1 relative min-h-0">
+
+      <!-- Feedback volant -->
+      <div id="feedback" class="absolute inset-0 flex items-center justify-center pointer-events-none z-10 opacity-0 transition-opacity duration-200">
+        <span id="feedback-text" class="font-black uppercase tracking-tight text-8 lg:text-14 drop-shadow-lg"></span>
+      </div>
+
+      <!-- Bouton réflexe -->
+      <button
+        id="reflex-btn"
+        class="absolute w-28 h-28 lg:w-40 lg:h-40 rounded-full border-0 cursor-pointer flex items-center justify-center shadow-2xl"
+        style={`background:#dc2626; top:50%; left:50%; transform:translate(-50%,-50%); transition: background 120ms ease; opacity:${mode === 'aleatoire' ? '0' : '1'};`}
+        aria-label="Cliquez dès que le bouton devient vert"
+      >
+        <span id="btn-label" class="text-white font-black text-3.5 lg:text-4 uppercase tracking-wide pointer-events-none text-center leading-tight px-3">
+          Attendez...
+        </span>
+      </button>
+
+    </div>
+
+    <!-- Overlay résultat -->
+    <div id="result-overlay" class="hidden fixed inset-0 bg-neutral-800/95 z-50">
+      <div class="flex items-center justify-center w-full h-full px-4">
+        <div class="w-full max-w-lg">
+
+          <div class="bg-zinc-800 border border-neutral-700 rounded-1 p-8 lg:p-10 mb-6">
+            <h2 class="text-white m-0 mb-1 text-5.5 text-center">Partie terminée !</h2>
+            <p id="result-score" class="text-primary-500 text-8 font-bold m-0 text-center"></p>
+            <p id="result-avg" class="text-neutral-300 text-3.5 font-medium opacity-60 m-0 mt-1 text-center mb-6"></p>
+
+            <!-- Détail rounds -->
+            <div id="result-rounds" class="flex flex-col gap-2 border-t border-neutral-700 pt-4"></div>
+          </div>
+
+          <div class="flex flex-col gap-3">
+            <a id="btn-rejouer" href="#"
+              class="h-12 bg-primary-600 text-white text-4 font-medium flex items-center justify-center no-underline hover:opacity-90 transition-opacity rounded-0.5">
+              Rejouer
+            </a>
+            <div class="flex flex-col lg:flex-row gap-3">
+              <a id="btn-params" href="#"
+                class="lg:flex-1 h-12 bg-zinc-800 border border-zinc-700 text-white text-4 font-medium flex items-center justify-center no-underline hover:opacity-80 transition-opacity rounded-0.5">
+                Changer les paramètres
+              </a>
+              <a href="/jeux"
+                class="lg:flex-1 h-12 bg-transparent border border-zinc-700 text-neutral-300 text-4 font-medium flex items-center justify-center no-underline hover:opacity-80 transition-opacity rounded-0.5">
+                Retour aux jeux
+              </a>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <div id="reflexe-meta" hidden
+    data-difficulty={difficulty}
+    data-mode={mode}
+    data-time-window={String(timeWindow)}
+    data-max-pts={String(maxPts)}
+    data-mode-bonus={String(modeBonus)}
+    data-total-rounds={String(TOTAL_ROUNDS)}
+    data-session-id={sessionId}
+    data-pb-url={PB_URL}
+    data-token={token}
+    data-user-id={userId}
+    data-in-session={String(inSession)}
+  ></div>
+
+  <script>
+    import '../../js/reflexe-game.js';
+  </script>
+
+</Layout>

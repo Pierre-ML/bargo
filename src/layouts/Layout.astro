@@ -1,0 +1,66 @@
+---
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import CookieBanner from "../components/CookieBanner.astro";
+import NotifBubble from "../components/NotifBubble.astro";
+import Seo from "../components/Seo.astro";
+
+import "../styles/global.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+  image?: string;
+  noFooter?: boolean;
+  noindex?: boolean;
+}
+
+const {
+  title = 'Bargo — Organisez votre barathon',
+  description = 'Bargo vous aide à organiser et vivre des barathons inoubliables. Découvrez nos bars partenaires, nos jeux et créez votre parcours.',
+  image,
+  noFooter = false,
+  noindex = false,
+} = Astro.props;
+
+const url = Astro.url.href;
+---
+
+<!doctype html>
+<html lang="fr" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="theme-color" content="#1e1e1e" />
+
+    <Seo title={title} description={description} image={image} url={url} noindex={noindex} />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500&family=Manrope:wght@500;700&display=swap" rel="stylesheet" />
+
+    <!-- Favicons -->
+    <link rel="icon" href="/favicon.svg" sizes="any" />
+
+    <!-- Umami Analytics -->
+    <script is:inline defer src="https://cloud.umami.is/script.js" data-website-id="2add65cc-9e96-4175-a741-e1a4438e1563"></script>
+  </head>
+
+  <body class="min-h-full m-0 w-full bg-black text-white antialiased">
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-100 focus:px-4 focus:py-2 focus:bg-white focus:text-black focus:font-medium focus:rounded">
+      Aller au contenu principal
+    </a>
+
+    <Header />
+
+    <main id="main-content" class="w-full pt-23">
+      <slot />
+    </main>
+
+    <Footer />
+    <CookieBanner />
+    <NotifBubble />
+  </body>
+</html>

@@ -1,0 +1,68 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="404 — Page introuvable · Bargo">
+
+  <section class="w-full min-h-[calc(100vh-92px)] bg-neutral-200 flex flex-col">
+
+    <!-- Header interne -->
+    <div class="border-t-0.5 border-primary-900 py-7">
+      <div class="max-w-360 mx-auto px-4 lg:px-20 flex justify-between items-center">
+        <span class="text-primary-900 text-3.5 font-medium leading-tight uppercase tracking-1">
+          BARGO
+        </span>
+        <span class="text-neutral-500 text-3.5 font-medium leading-tight">
+          Erreur / Page introuvable
+        </span>
+      </div>
+    </div>
+
+    <!-- Zone 404 — flex-1 pour occuper l'espace -->
+    <div class="flex-1 flex items-center border-b-0.5 border-primary-900 overflow-hidden">
+      <div class="max-w-360 mx-auto px-4 lg:px-20 w-full py-10">
+
+        <!-- Gros 404 -->
+        <h1 class="m-0 text-primary-900 leading-none" style="font-size: clamp(160px, 22vw, 340px); letter-spacing: -0.02em;">
+          404
+        </h1>
+
+        <!-- Ligne verte sous le 404 -->
+        <div class="w-full h-1.5 bg-primary-500"></div>
+
+      </div>
+    </div>
+
+    <!-- Bas : message + CTAs -->
+    <div class="py-15">
+      <div class="max-w-360 mx-auto px-4 lg:px-20 flex flex-col lg:flex-row lg:justify-between items-start lg:items-center gap-6 lg:gap-20">
+
+        <!-- Texte -->
+        <div class="flex flex-col gap-4">
+          <h3 class="text-neutral-800 m-0">
+            Cette page a fermé ses portes.
+          </h3>
+          <p class="text-neutral-500 text-4 font-medium leading-snug m-0">
+            L'adresse que vous cherchez n'existe pas ou a été déplacée.<br />
+            La tournée continue ailleurs.
+          </p>
+        </div>
+
+        <!-- CTAs -->
+        <div class="flex items-center gap-3 lg:gap-6 shrink-0 flex-wrap">
+          <a href="/"
+            class="inline-flex items-center justify-center px-12.5 h-15 bg-primary-900 text-white text-4 font-medium leading-snug whitespace-nowrap hover:opacity-90 transition-opacity">
+            Retour à l'accueil
+          </a>
+          <a href="/bar"
+            class="inline-flex items-center justify-center px-12.5 h-15 border-0.5 border-primary-900 text-primary-900 text-4 font-medium leading-snug whitespace-nowrap hover:bg-primary-900 hover:text-white transition-colors">
+            Voir nos bars
+          </a>
+        </div>
+
+      </div>
+    </div>
+
+  </section>
+
+</Layout>

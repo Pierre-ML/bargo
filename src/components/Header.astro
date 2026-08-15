@@ -1,0 +1,179 @@
+---
+import { Image } from 'astro:assets';
+import logoDark from '../assets/icon/logo-dark.svg';
+import arrowRightLg from '../assets/icon/arrow_right_lg.svg';
+import userIcon  from '../assets/icon/user.svg';
+import PbImage from '../components/PbImage.astro';
+import { getImageUrl } from '../../backend/backend.js';
+import '../styles/header.css';
+
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+const isLoggedIn = !!(token && userId);
+const profileHref = isLoggedIn ? '/profil' : '/connexion';
+const path = Astro.url.pathname;
+
+const PB_URL = 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr';
+let avatarUrl = null;
+if (isLoggedIn) {
+  const res = await fetch(`${PB_URL}/api/collections/users/records/${userId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (res.ok) {
+    const user = await res.json();
+    if (user.avatar) avatarUrl = getImageUrl(user, user.avatar);
+  }
+}
+---
+
+<header class="fixed top-0 left-0 w-full z-50 bg-white shadow-md">
+  <div class="max-w-360 mx-auto px-4 lg:px-20 h-23 flex items-center">
+
+    <!-- Logo -->
+    <a href="/" class="shrink-0">
+      <Image src={logoDark} alt="Bargo" class="h-10.5 w-auto block" />
+    </a>
+
+    <!-- Navigation desktop — inchangé -->
+    <nav class="hidden lg:flex items-center ml-13">
+      <a href="/bar"
+        class={`px-8.75 py-6.25 font-medium text-3.5 leading-tight text-black hover:opacity-70 transition-opacity whitespace-nowrap border-b-1.75 ${path.startsWith('/bar') ? 'border-primary-500' : 'border-transparent'}`}>
+        Nos bars
+      </a>
+      <a href="/Apropos"
+        class={`px-8.75 py-6.25 font-medium text-3.5 leading-tight text-black hover:opacity-70 transition-opacity whitespace-nowrap border-b-1.75 ${path.startsWith('/Apropos') ? 'border-primary-500' : 'border-transparent'}`}>
+        A propos
+      </a>
+      <a href="/jeux"
+        class={`px-8.75 py-6.25 font-medium text-3.5 leading-tight text-black hover:opacity-70 transition-opacity whitespace-nowrap border-b-1.75 ${path.startsWith('/jeux') ? 'border-primary-500' : 'border-transparent'}`}>
+        Nos jeux
+      </a>
+      <a href="/boutique"
+        class={`px-8.75 py-6.25 font-medium text-3.5 leading-tight text-black hover:opacity-70 transition-opacity whitespace-nowrap border-b-1.75 ${path.startsWith('/boutique') ? 'border-primary-500' : 'border-transparent'}`}>
+        Boutique
+      </a>
+      <a href="/abonnement"
+        class={`px-8.75 py-6.25 font-medium text-3.5 leading-tight text-black hover:opacity-70 transition-opacity whitespace-nowrap border-b-1.75 ${path.startsWith('/abonnement') ? 'border-primary-500' : 'border-transparent'}`}>
+        Abonnement
+      </a>
+    </nav>
+
+    <!-- Spacer -->
+    <div class="flex-1"></div>
+
+    <!-- Actions desktop -->
+    <div class="hidden lg:flex items-center gap-6.5">
+      <a href={profileHref} aria-label="Mon profil" class="hover:opacity-70 transition-opacity">
+        {avatarUrl ? (
+          <PbImage src={avatarUrl} alt="Mon profil" width={31} height={31} class="size-7.75 rounded-full object-cover" />
+        ) : (
+          <Image src={userIcon} alt="" width={31} height={31} />
+        )}
+      </a>
+      <a href={isLoggedIn ? '/session' : '/inscription'} class="inline-flex items-center justify-center px-12.5 h-11.25 bg-black text-white font-medium text-3.5 leading-tight whitespace-nowrap hover:opacity-80 transition-opacity">
+        {isLoggedIn ? 'Crée un barathon' : "S'inscrire"}
+      </a>
+    </div>
+
+    <!-- Zone droite mobile : icône connexion + hamburger -->
+    <div class="lg:hidden flex items-center gap-4">
+
+      <!-- Connexion / profil -->
+      <a href={profileHref} aria-label="Mon profil" class="hover:opacity-70 transition-opacity">
+        {avatarUrl ? (
+          <PbImage src={avatarUrl} alt="Mon profil" width={30} height={30} class="size-7.5 rounded-full object-cover" />
+        ) : (
+          <Image src={userIcon} alt="" width={28} height={28} />
+        )}
+      </a>
+
+      <!-- Bouton hamburger / croix -->
+      <button id="nav-hamburger" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="nav-mobile-menu"
+        class="relative w-6.5 h-5 bg-transparent border-0 cursor-pointer p-0 shrink-0">
+        <span class="ham-bar absolute left-0 w-full h-0.5 bg-black top-0 origin-center"></span>
+        <span class="ham-bar absolute left-0 w-full h-0.5 bg-black top-2.25 origin-center"></span>
+        <span class="ham-bar absolute left-0 w-full h-0.5 bg-black top-4.5 origin-center"></span>
+      </button>
+
+    </div>
+
+  </div>
+</header>
+
+<!-- =====================================================
+     MENU MOBILE PLEIN ÉCRAN
+===================================================== -->
+<div id="nav-mobile-menu"
+  class="lg:hidden fixed left-0 right-0 bottom-0 z-45 flex flex-col">
+
+  <!-- Fond -->
+  <div class="absolute inset-0 bg-neutral-800"></div>
+
+  <!-- Contenu du menu -->
+  <nav aria-label="Menu principal mobile" class="relative z-10 flex flex-col justify-between h-full px-6 py-8">
+
+    <!-- Liens nav -->
+    <div class="flex flex-col gap-0">
+
+      <a href="/bar"
+        class={`nav-link group flex items-center justify-between py-4 border-b border-white/10 ${path.startsWith('/bar') ? 'text-primary-500' : 'text-white'}`}>
+        <div class="flex items-baseline gap-3">
+          <span class="text-primary-500 font-inter font-medium text-3 opacity-60">01</span>
+          <span class="font-manrope font-bold leading-none uppercase" style="font-size: clamp(28px, 9vw, 42px);">Nos bars</span>
+        </div>
+        <Image src={arrowRightLg} alt="" width={18} height={18} class="opacity-0 group-hover:opacity-100 transition-opacity" />
+      </a>
+
+      <a href="/Apropos"
+        class={`nav-link group flex items-center justify-between py-4 border-b border-white/10 ${path.startsWith('/Apropos') ? 'text-primary-500' : 'text-white'}`}>
+        <div class="flex items-baseline gap-3">
+          <span class="text-primary-500 font-inter font-medium text-3 opacity-60">02</span>
+          <span class="font-manrope font-bold leading-none uppercase" style="font-size: clamp(28px, 9vw, 42px);">A propos</span>
+        </div>
+        <Image src={arrowRightLg} alt="" width={18} height={18} class="opacity-0 group-hover:opacity-100 transition-opacity" />
+      </a>
+
+      <a href="/jeux"
+        class={`nav-link group flex items-center justify-between py-4 border-b border-white/10 ${path.startsWith('/jeux') ? 'text-primary-500' : 'text-white'}`}>
+        <div class="flex items-baseline gap-3">
+          <span class="text-primary-500 font-inter font-medium text-3 opacity-60">03</span>
+          <span class="font-manrope font-bold leading-none uppercase" style="font-size: clamp(28px, 9vw, 42px);">Nos jeux</span>
+        </div>
+        <Image src={arrowRightLg} alt="" width={18} height={18} class="opacity-0 group-hover:opacity-100 transition-opacity" />
+      </a>
+
+      <a href="/boutique"
+        class={`nav-link group flex items-center justify-between py-4 border-b border-white/10 ${path.startsWith('/boutique') ? 'text-primary-500' : 'text-white'}`}>
+        <div class="flex items-baseline gap-3">
+          <span class="text-primary-500 font-inter font-medium text-3 opacity-60">04</span>
+          <span class="font-manrope font-bold leading-none uppercase" style="font-size: clamp(28px, 9vw, 42px);">Boutique</span>
+        </div>
+        <Image src={arrowRightLg} alt="" width={18} height={18} class="opacity-0 group-hover:opacity-100 transition-opacity" />
+      </a>
+
+      <a href="/abonnement"
+        class={`nav-link group flex items-center justify-between py-4 ${path.startsWith('/abonnement') ? 'text-primary-500' : 'text-white'}`}>
+        <div class="flex items-baseline gap-3">
+          <span class="text-primary-500 font-inter font-medium text-3 opacity-60">05</span>
+          <span class="font-manrope font-bold leading-none uppercase" style="font-size: clamp(28px, 9vw, 42px);">Abonnement</span>
+        </div>
+        <Image src={arrowRightLg} alt="" width={18} height={18} class="opacity-0 group-hover:opacity-100 transition-opacity" />
+      </a>
+
+    </div>
+
+    <!-- CTA session -->
+    <div class="flex gap-3">
+      <a href={isLoggedIn ? '/session' : '/inscription'}
+        class="nav-link flex flex-1 items-center justify-center h-14 bg-primary-500 text-primary-900 font-bold text-4 uppercase tracking-widest hover:bg-primary-550 transition-colors">
+        {isLoggedIn ? 'Crée un barathon' : "S'inscrire"}
+      </a>
+    </div>
+
+  </nav>
+</div>
+
+
+<script>
+  import '../js/header.js';
+</script>

@@ -1,0 +1,42 @@
+---
+// @ts-nocheck
+import { Image } from 'astro:assets';
+import arrowRightLg from '../assets/icon/arrow_right_lg.svg';
+const { session, isHote, isEnCours } = Astro.props;
+---
+
+<div class="w-full lg:w-115 lg:shrink-0 flex flex-col lg:h-[calc(100vh-92px)] overflow-hidden bg-neutral-800">
+
+  <!-- Session info -->
+  <div class="px-7 pt-6 pb-4.5 border-b border-white/10 shrink-0">
+    <p class="text-2.75 font-bold uppercase tracking-widest text-primary-500 m-0 mb-1.5">Barathon</p>
+    <h3 class="text-white m-0">{session.nom}</h3>
+    {(session.date || session.heure_debut) && (
+      <p class="text-3.25 font-medium text-neutral-200/50 m-0 mt-1.5">
+        {session.date ?? ''}{session.date && session.heure_debut ? ' · ' : ''}{session.heure_debut ?? ''}{session.heure_debut && session.heure_fin && <><Image src={arrowRightLg} alt="" width={12} height={12} class="inline-block align-middle mx-1 opacity-50" />{session.heure_fin}</>}
+      </p>
+    )}
+  </div>
+
+  <!-- Tabs -->
+  <div class="flex border-b border-white/10 shrink-0">
+    <button class="final-tab flex-1 h-12 text-3.25 font-medium border-0 bg-transparent cursor-pointer text-primary-500 border-b-2 border-primary-500" data-tab="bars">Bars</button>
+    <button class="final-tab flex-1 h-12 text-3.25 font-medium border-0 bg-transparent cursor-pointer text-neutral-200/50 border-b-2 border-transparent" data-tab="jeux">Jeux</button>
+    <button class="final-tab flex-1 h-12 text-3.25 font-medium border-0 bg-transparent cursor-pointer text-neutral-200/50 border-b-2 border-transparent" data-tab="amis">Amis</button>
+    <button class="final-tab flex-1 h-12 text-3.25 font-medium border-0 bg-transparent cursor-pointer text-neutral-200/50 border-b-2 border-transparent" data-tab="params">Paramètres</button>
+  </div>
+
+  <!-- Tab content -->
+  <div id="tab-content" class="overflow-y-auto flex-1 px-6 py-5"></div>
+
+  <!-- Bottom bar – visible uniquement avant le lancement -->
+  <div id="bottom-bar" class={`px-6 py-4.5 border-t border-white/10 shrink-0 ${isEnCours ? 'hidden' : 'block'}`}>
+    {isHote && (
+      <button id="btn-launch-session" class="w-full h-10.5 bg-primary-600 border-0 text-white text-3.5 font-medium cursor-pointer rounded mb-2.5">
+        ▶ Lancer la session
+      </button>
+    )}
+    <button id="btn-add-more" class="w-full h-10.5 bg-transparent border border-white/25 text-white text-3.5 font-medium cursor-pointer rounded">+ Ajouter</button>
+  </div>
+
+</div>

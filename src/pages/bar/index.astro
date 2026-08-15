@@ -1,0 +1,105 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import PbImage from '../../components/PbImage.astro';
+import { getCollection } from '../../../backend/backend.js';
+import LikeButton from '../../components/LikeButton.astro';
+
+const bars = await getCollection('bar', { sort: 'nom', perPage: 200 });
+
+const PB_URL = 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr';
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+const isAuth = !!(token && userId);
+
+let barFavori = [];
+if (isAuth) {
+  const userRes = await fetch(`${PB_URL}/api/collections/users/records/${userId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (userRes.ok) {
+    const user = await userRes.json();
+    barFavori = Array.isArray(user.bar_favori) ? user.bar_favori : [];
+  }
+}
+---
+
+<Layout title="Nos bars — Bargo">
+
+  <!-- ===== HERO ===== -->
+  <section class="relative w-full bg-primary-900 h-70 lg:h-112.5">
+    <!-- Wrapper centré -->
+    <div class="absolute top-0 left-0 h-full w-full lg:max-w-360 lg:left-1/2 lg:-translate-x-1/2">
+      <h1 class="absolute top-15 left-5 lg:top-35.25 lg:left-18.5 text-white uppercase m-0 text-10 lg:text-22.5">
+        Nos bars
+      </h1>
+      <p class="block lg:hidden absolute bottom-6 left-5 right-5 text-neutral-300 text-3.5 font-medium m-0 leading-snug">
+        Explorez les bars de Montbéliard et choisissez les étapes de votre prochaine tournée.
+      </p>
+      <p class="hidden lg:block absolute top-38.75 left-[calc(50%+16px)] w-136.75 text-neutral-200 text-4 font-medium leading-snug m-0">
+        Explorez les bars de Montbéliard et choisissez les étapes de votre prochaine tournée.
+        Créez un parcours sur mesure pour une soirée organisée et conviviale.
+      </p>
+    </div>
+  </section>
+
+  <!-- ===== GRILLE DES BARS ===== -->
+  <section class="w-full bg-neutral-200 pt-8 lg:pt-13.25 pb-12 lg:pb-30">
+    <div class="max-w-360 mx-auto px-4 lg:px-20">
+
+      {bars.length === 0 && (
+        <p class="text-neutral-500 text-4 font-medium text-center py-20">
+          Aucun bar disponible pour le moment.
+        </p>
+      )}
+
+      <!-- Mobile: 1 col, Desktop: 3 cols -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-x-8.25 lg:gap-y-20.5">
+        {bars.map(bar => (
+          <div class="relative bg-white rounded-0.5 shadow-md overflow-hidden">
+
+            <!-- Image -->
+            <div class="w-full h-50 lg:h-75 overflow-hidden">
+              <PbImage record={bar} recordImage={bar.img?.[0]} width={405} height={300} class="w-full h-full object-cover" />
+            </div>
+
+            <!-- Contenu -->
+            <div class="relative p-4 lg:p-0 lg:h-58">
+
+              <!-- Nom du bar -->
+              <h3 class="m-0 text-black truncate lg:absolute lg:top-5 lg:left-4.75 lg:right-10.25">
+                {bar.nom}
+              </h3>
+
+              <!-- Adresse -->
+              <p class="mt-2 lg:mt-0 text-neutral-500 text-4 font-medium leading-snug m-0 lg:absolute lg:top-18.25 lg:left-4.75 lg:right-41.75">
+                {bar.adresse ?? ''}
+              </p>
+
+              <!-- Actions -->
+              <div class="mt-4 lg:mt-0 flex items-center gap-3 lg:block">
+                <!-- Bouton -->
+                <a href={`/bar/${bar.id}`}
+                  class="flex-1 lg:flex-none lg:absolute lg:top-35.5 lg:left-4.75 lg:w-59.25 lg:h-15 h-12 bg-neutral-800 flex items-center justify-center text-white text-4 font-medium whitespace-nowrap hover:bg-primary-900 transition-colors">
+                  Choisir mes bars
+                </a>
+                <!-- Cœur -->
+                {isAuth && (
+                  <LikeButton id={bar.id} liked={barFavori.includes(bar.id)} variant="bar" class="lg:absolute lg:top-37.75 lg:right-5.25 w-10.25 h-10.25 flex items-center justify-center shrink-0 bg-transparent border-0 cursor-pointer p-0" ariaLabel="Ajouter aux favoris" />
+                )}
+              </div>
+
+            </div>
+          </div>
+        ))}
+      </div>
+
+    </div>
+  </section>
+
+  {isAuth && <div id="auth-meta" data-token={token} data-user-id={userId} hidden></div>}
+
+  <script>
+    import '../../js/like.js';
+  </script>
+
+</Layout>

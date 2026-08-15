@@ -1,0 +1,1383 @@
+---
+// @ts-nocheck
+import Layout from '../../layouts/Layout.astro';
+import { Image } from 'astro:assets';
+import { getUserAuth, updateUser, deleteUser, getCollection, getImageUrl, PB_URL } from '../../../backend/backend.js';
+import PbImage from '../../components/PbImage.astro';
+import heartIcon    from '../../assets/icon/like.svg';
+import likeFillIcon from '../../assets/icon/like_fill.svg';
+import instaIcon    from '../../assets/icon/insta.svg';
+import facebookIcon from '../../assets/icon/facebook.svg';
+import discordIcon  from '../../assets/icon/discord.svg';
+import badgeVip     from '../../assets/icon/badge_vip.svg';
+import badgePremium from '../../assets/icon/badge_pernuim.svg';
+import arrowRightLg  from '../../assets/icon/arrow_right_lg.svg';
+import bellIcon       from '../../assets/icon/bell.svg';
+import notifIcon      from '../../assets/icon/notifcation.svg';
+import panierIcon     from '../../assets/icon/panier.svg';
+import searchIcon     from '../../assets/icon/search.svg';
+import settingsIcon   from '../../assets/icon/settings.svg';
+
+// Auth guard
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+if (!token || !userId) return Astro.redirect('/connexion');
+
+let updateError   = '';
+let updateSuccess = false;
+let pwdError      = '';
+let pwdSuccess    = false;
+let emailError    = '';
+let emailSuccess  = false;
+let activeTab     = Astro.url.searchParams.get('tab') ?? 'profil';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action   = formData.get('_action')?.toString();
+
+  if (action === 'logout') {
+    Astro.cookies.delete('pb_token',   { path: '/' });
+    Astro.cookies.delete('pb_user_id', { path: '/' });
+    return Astro.redirect('/');
+  }
+
+  if (action === 'delete') {
+    await deleteUser(userId, token);
+    Astro.cookies.delete('pb_token',   { path: '/' });
+    Astro.cookies.delete('pb_user_id', { path: '/' });
+    return Astro.redirect('/');
+  }
+
+  if (action === 'edit') {
+    const pbData = new FormData();
+    for (const field of ['prenom', 'nom', 'pseudo', 'age', 'ville', 'insta', 'facbook', 'discord', 'description']) {
+      const val = formData.get(field);
+      if (val !== null && val.toString() !== '') pbData.append(field, val.toString());
+    }
+    const avatarFile = formData.get('avatar');
+    if (avatarFile instanceof File && avatarFile.size > 0) pbData.append('avatar', avatarFile, avatarFile.name);
+    const result = await updateUser(userId, token, pbData);
+    if (result) { updateSuccess = true; } else { updateError = 'Erreur lors de la mise à jour.'; }
+    activeTab = 'profil';
+  }
+
+  if (action === 'change_password') {
+    const oldPwd     = formData.get('old_password')?.toString()     ?? '';
+    const newPwd     = formData.get('new_password')?.toString()     ?? '';
+    const confirmPwd = formData.get('confirm_password')?.toString() ?? '';
+    if (!oldPwd || !newPwd || !confirmPwd) {
+      pwdError = 'Tous les champs sont requis.';
+    } else if (newPwd !== confirmPwd) {
+      pwdError = 'Les mots de passe ne correspondent pas.';
+    } else if (newPwd.length < 8) {
+      pwdError = 'Le mot de passe doit contenir au moins 8 caractères.';
+    } else {
+      const pbData = new FormData();
+      pbData.append('oldPassword',     oldPwd);
+      pbData.append('password',        newPwd);
+      pbData.append('passwordConfirm', confirmPwd);
+      const result = await updateUser(userId, token, pbData);
+      if (result) { pwdSuccess = true; } else { pwdError = 'Mot de passe actuel incorrect.'; }
+    }
+    activeTab = 'parametres';
+  }
+
+  if (action === 'change_email') {
+    const newEmail = formData.get('new_email')?.toString().trim() ?? '';
+    if (!newEmail || !newEmail.includes('@')) {
+      emailError = 'Adresse email invalide.';
+    } else {
+      const pbData = new FormData();
+      pbData.append('email', newEmail);
+      const result = await updateUser(userId, token, pbData);
+      if (result) { emailSuccess = true; } else { emailError = 'Erreur lors de la mise à jour.'; }
+    }
+    activeTab = 'parametres';
+  }
+}
+
+// Données utilisateur
+const user = await getUserAuth(userId, token);
+if (!user || user.code === 404) {
+  Astro.cookies.delete('pb_token',   { path: '/' });
+  Astro.cookies.delete('pb_user_id', { path: '/' });
+  return Astro.redirect('/connexion');
+}
+
+// Notifications
+let notifications = [];
+try {
+  notifications = await getCollection('notifications', {
+    filter:  `user = "${userId}"`,
+    sort:    '-created',
+    perPage: 50
+  });
+} catch {}
+
+// Bars découverts
+const barDecouver = Array.isArray(user.bar_decouver) ? user.bar_decouver : [];
+let totalBars = 0;
+try {
+  const bRes = await fetch(`${PB_URL}/api/collections/bar/records?perPage=1`);
+  if (bRes.ok) { const bd = await bRes.json(); totalBars = bd.totalItems ?? 0; }
+} catch {}
+
+// Bars favoris (tous)
+let barsFavori = [];
+try {
+  const favIds = Array.isArray(user.bar_favori) ? user.bar_favori : [];
+  if (favIds.length > 0) {
+    const filterStr = favIds.map(id => `id="${id}"`).join('||');
+    barsFavori = await getCollection('bar', { filter: filterStr, perPage: 200 });
+  }
+} catch {}
+
+// Jeux favoris (expand via getUserAuth)
+const jeuxFavori = (user.expand?.jeux_favori ?? []);
+
+// Boissons favorites (expand via getUserAuth)
+const boissonsFavori = (user.expand?.boisson_favori ?? []);
+
+// Invitations de session entrantes
+const demandeSession = (user.expand?.demande_session ?? []).map(s => ({
+  id: s.id,
+  nom: s.nom ?? 'Session sans nom',
+  date: s.date_heur_depart?.split(' ')[0] ?? null,
+  hote: s.id_hote ?? null,
+}));
+
+// Demandes d'amis entrantes (expand already done in getUserAuth)
+const demandeAmies = (user.expand?.demande_amies ?? []).map(u => ({
+  id: u.id, collectionName: u.collectionName,
+  pseudo: u.pseudo ?? '', prenom: u.prenom ?? '', nom: u.nom ?? '',
+  avatar: u.avatar ?? null,
+}));
+const amiesIds    = Array.isArray(user.amies) ? user.amies : [];
+const amiesExpand = (user.expand?.amies ?? []).map(u => {
+  const decoRec = u.expand?.equiper_avatar_decoration ?? null;
+  const amiDecoUrl = decoRec?.type_decoration_avatar ? getImageUrl(decoRec, decoRec.type_decoration_avatar) : null;
+  return {
+    id: u.id, collectionName: u.collectionName,
+    pseudo: u.pseudo ?? '', prenom: u.prenom ?? '', nom: u.nom ?? '',
+    avatar: u.avatar ?? null, abonnements: u.abonnements ?? 'Gratuit',
+    decoUrl: amiDecoUrl,
+  };
+});
+
+// Tous les utilisateurs pour le modal ami (exclure soi-même)
+let allUsers = [];
+try {
+  const usersRes = await getCollection('users', { sort: 'pseudo', perPage: 200 });
+  allUsers = usersRes
+    .filter(u => u.id !== userId)
+    .map(u => ({
+      id: u.id, collectionName: u.collectionName,
+      pseudo: u.pseudo ?? '', prenom: u.prenom ?? '', nom: u.nom ?? '',
+      avatar: u.avatar ?? null,
+    }));
+} catch {}
+
+const avatarUrl    = user.avatar ? getImageUrl(user, user.avatar) : null;
+
+// Items boutique équipés
+const decoRecord   = user.expand?.equiper_avatar_decoration ?? null;
+const titreRecord  = user.expand?.equiper_titre             ?? null;
+const themeRecord  = user.expand?.equiper_theme             ?? null;
+const decoUrl      = decoRecord?.type_decoration_avatar  ? getImageUrl(decoRecord,  decoRecord.type_decoration_avatar) : null;
+const equippedTitre = titreRecord?.type_titre ?? null;
+const themeUrl     = themeRecord?.type_them              ? getImageUrl(themeRecord, themeRecord.type_them)             : null;
+
+// Inventaire boutique
+const possedDecorations = (user.expand?.possed_avatar_decoration ?? []).map(item => ({
+  id: item.id, nom: item.nom ?? '',
+  imageUrl: item.type_decoration_avatar ? getImageUrl(item, item.type_decoration_avatar) : null,
+  isEquipped: decoRecord?.id === item.id,
+}));
+const possedTitres = (user.expand?.possed_titre ?? []).map(item => ({
+  id: item.id, nom: item.nom ?? '', type_titre: item.type_titre ?? '',
+  isEquipped: titreRecord?.id === item.id,
+}));
+const possedThemes = (user.expand?.possed_theme ?? []).map(item => ({
+  id: item.id, nom: item.nom ?? '',
+  imageUrl: item.type_them ? getImageUrl(item, item.type_them) : null,
+  isEquipped: themeRecord?.id === item.id,
+}));
+const itemsFavori = (user.expand?.items_favori ?? []).map(item => ({
+  id: item.id, nom: item.nom ?? '', type: item.type ?? '',
+  imageUrl: item.type === 'decoration_avatar' ? (item.type_decoration_avatar ? getImageUrl(item, item.type_decoration_avatar) : null)
+          : item.type === 'theme'             ? (item.type_them              ? getImageUrl(item, item.type_them)              : null)
+          : null,
+  type_titre: item.type_titre ?? '',
+}));
+
+const createdAt    = user.created
+  ? new Date(user.created).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+  : '—';
+const unreadNotifs = notifications.filter(n => !n.lu).length;
+
+function timeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1)  return "À l'instant";
+  if (mins < 60) return `Il y a ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)  return `Il y a ${hrs}h`;
+  return `Il y a ${Math.floor(hrs / 24)}j`;
+}
+
+const displayName = user.prenom
+  ? `${user.prenom} ${user.nom ?? ''}`.trim()
+  : (user.nom ?? user.pseudo ?? '');
+---
+
+<Layout title="Mon profil — Bargo">
+  <section class="bg-neutral-200 overflow-x-hidden">
+
+    <!-- ===== MOBILE PROFILE HEADER ===== -->
+    <div class="block lg:hidden px-5 pt-8 pb-6">
+      <!-- Avatar — conteneur large pour la décoration -->
+      <div class="mx-auto relative" style="width:144px; height:144px;">
+        <!-- Ring + photo : centrés à 100px dans le conteneur de 200px -->
+        <div class="absolute rounded-full" style="width:100px; height:100px; top:50%; left:50%; transform:translate(-50%,-50%);">
+          <div class="absolute inset-0 rounded-full" style="border: 8px solid #dfdfdf; z-index:1;"></div>
+          <div class="absolute inset-2 rounded-full overflow-hidden" style="z-index:2;">
+            {avatarUrl
+              ? <PbImage src={avatarUrl} alt="Avatar" class="w-full h-full object-cover" />
+              : <div class="w-full h-full bg-neutral-800 flex items-center justify-center">
+                  <span class="text-white font-bold" style="font-size: 36px;">
+                    {(user.pseudo || user.email || '?')[0].toUpperCase()}
+                  </span>
+                </div>
+            }
+          </div>
+        </div>
+        <!-- Décoration : remplit le conteneur de 200px (2× la taille de l'avatar) -->
+        {decoUrl && (
+          <div class="absolute inset-0 pointer-events-none" style="z-index:3;">
+            <PbImage src={decoUrl} alt="" class="w-full h-full object-contain" />
+          </div>
+        )}
+      </div>
+      <h2 class="text-black m-0 mt-4 text-center text-7">{displayName}</h2>
+      {equippedTitre && (
+        <p class="m-0 text-center text-primary-600 font-bold text-3.5">{equippedTitre}</p>
+      )}
+      <div class="flex items-center justify-center gap-2 mt-1">
+        <h3 class="m-0 text-primary-500">{user.pseudo ?? ''}</h3>
+        {user.abonnements === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={24} height={24} />}
+        {user.abonnements === 'Premium' && <Image src={badgePremium} alt="Premium" width={24} height={24} />}
+      </div>
+      <p class="m-0 mt-2 text-center text-neutral-800 text-4 font-medium">{amiesIds.length} ami(e)s</p>
+      <div class="mt-3 h-12.5 bg-primary-900 rounded-1.25 flex items-center justify-center gap-4">
+        <h3 class="text-white m-0">Points :</h3>
+        <h3 class="text-white m-0">{user.points ?? 0}</h3>
+      </div>
+      {user.description && (
+        <div class="mt-4">
+          <p class="m-0 text-4 font-medium text-black uppercase">DESCRIPTION</p>
+          <p class="m-0 mt-1 text-neutral-500 text-4 font-medium leading-snug">{user.description}</p>
+        </div>
+      )}
+    </div>
+
+    <!-- ===== DESKTOP PROFILE HEADER ===== -->
+    <div class="hidden lg:block relative" style="height: 420px;">
+      <!-- Photo de profil -->
+      <div id="profile-avatar-wrap" class="absolute left-20 top-29.75 size-46.75 rounded-full z-2">
+        <!-- Anneau gris -->
+        <div class="absolute inset-0 rounded-full" style="border: 15px solid #dfdfdf; z-index:1;"></div>
+        <!-- Photo (inset = épaisseur du border) -->
+        <div class="absolute inset-3.75 rounded-full overflow-hidden" style="z-index:2;">
+          {avatarUrl
+            ? <PbImage src={avatarUrl} alt="Avatar" class="w-full h-full object-cover" />
+            : <div class="w-full h-full bg-neutral-800 flex items-center justify-center">
+                <span class="text-white font-bold" style="font-size: 60px;">
+                  {(user.pseudo || user.email || '?')[0].toUpperCase()}
+                </span>
+              </div>
+          }
+        </div>
+      </div>
+      <!-- Décoration desktop : 218px centrés sur l'avatar (187px), légèrement plus bas -->
+      {decoUrl && (
+        <div class="absolute pointer-events-none" style="z-index:5; width:224px; height:224px; left:calc(80px - 20px); top:calc(119px - 18px + 5px);">
+          <PbImage src={decoUrl} alt="" class="w-full h-full object-contain" />
+        </div>
+      )}
+      <!-- Nom -->
+      <h2 class="absolute m-0 text-black overflow-hidden text-ellipsis whitespace-nowrap w-86"
+        style="left: calc(16.67% + 59px); top: 119px;">
+        {displayName}
+      </h2>
+      <!-- Pseudo -->
+      <div class="absolute flex items-center gap-2" style="left: calc(16.67% + 59px); top: 185px;">
+        <h3 class="m-0 text-primary-500">{user.pseudo ?? ''}</h3>
+        {user.abonnements === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={28} height={28} />}
+        {user.abonnements === 'Premium' && <Image src={badgePremium} alt="Premium" width={28} height={28} />}
+      </div>
+      <!-- Titre équipé -->
+      {equippedTitre && (
+        <p class="absolute m-0 text-primary-600 font-bold text-4 leading-snug"
+          style="left: calc(16.67% + 59px); top: 215px;">{equippedTitre}</p>
+      )}
+      <!-- Ami(e)s -->
+      <p class="absolute m-0 text-neutral-800 text-4 font-medium leading-snug"
+        style="left: calc(33.33% + 79px); top: 198px;">
+        {amiesIds.length} ami(e)s
+      </p>
+      <!-- Points badge -->
+      <div class="absolute h-16.25 w-86 bg-primary-900 rounded-1.25 shadow-md flex items-center pl-4 gap-4"
+        style="left: calc(16.67% + 59px); top: 241px;">
+        <h3 class="text-white m-0">Points :</h3>
+        <h3 class="text-white m-0">{user.points ?? 0}</h3>
+      </div>
+      <!-- DESCRIPTION label -->
+      <p class="absolute m-0 text-4 font-medium text-black uppercase leading-snug"
+        style="left: calc(50% + 17px); top: 127px;">
+        DESCRIPTION
+      </p>
+      <!-- Description text -->
+      <p class="absolute m-0 text-neutral-500 text-4 font-medium leading-snug w-155.75"
+        style="left: calc(50% + 16px); top: 174px;">
+        {user.description ?? '—'}
+      </p>
+    </div>
+
+    <!-- Séparateur shadow (desktop only) -->
+    <div class="hidden lg:block h-4.5 bg-neutral-200 shadow-md z-3"></div>
+
+    <!-- ===== DEUX COLONNES ===== -->
+    <div class="flex flex-col lg:flex-row">
+
+      <!-- SIDEBAR SOMBRE (desktop only) -->
+      <div class="hidden lg:block lg:w-94 lg:shrink-0 bg-neutral-800 overflow-y-auto">
+        <div class="px-8 pt-6 pb-10 flex flex-col gap-5">
+
+          <!-- Boutique -->
+          <a href="/boutique"
+            class="flex items-center justify-center border-2 border-white text-white text-4 font-medium leading-snug h-15 w-59.25 hover:bg-white hover:text-neutral-800 transition-colors shrink-0">
+            Boutique
+          </a>
+
+          <!-- Ajouter des amis -->
+          <button id="btn-open-friends"
+            class="flex items-center justify-center border-2 border-white text-white text-4 font-medium leading-snug h-15 w-59.25 hover:bg-white hover:text-neutral-800 transition-colors cursor-pointer bg-transparent shrink-0">
+            Ajouter des amis
+          </button>
+
+          <!-- Liste des amis -->
+          {amiesExpand.length > 0 && (
+            <div class="flex flex-col gap-5 mt-3">
+              {amiesExpand.map(ami => (
+                <a href={`/profil/${ami.id}`} class="flex items-center gap-4 no-underline hover:opacity-80 transition-opacity">
+                  <div class="relative shrink-0" style="width:96px; height:96px;">
+                    <div class="absolute rounded-full overflow-hidden" style="width:64px; height:64px; top:50%; left:50%; transform:translate(-50%,-50%); z-index:1;">
+                      {ami.avatar
+                        ? <PbImage record={ami} recordImage={ami.avatar} alt={ami.pseudo} class="w-full h-full object-cover" />
+                        : <div class="w-full h-full bg-primary-600 flex items-center justify-center">
+                            <span class="text-white font-bold text-6">{(ami.pseudo || ami.prenom || '?')[0].toUpperCase()}</span>
+                          </div>
+                      }
+                    </div>
+                    {ami.decoUrl && (
+                      <div class="absolute inset-0 pointer-events-none" style="z-index:2;">
+                        <PbImage src={ami.decoUrl} alt="" class="w-full h-full object-contain" />
+                      </div>
+                    )}
+                  </div>
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5">
+                      <p class="text-white font-bold text-4 m-0 truncate">{ami.pseudo || ''}</p>
+                      {ami.abonnements === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={18} height={18} class="shrink-0" />}
+                      {ami.abonnements === 'Premium' && <Image src={badgePremium} alt="Premium" width={18} height={18} class="shrink-0" />}
+                    </div>
+                    <p class="text-neutral-300 text-3.5 font-medium m-0 truncate">{`${ami.prenom ?? ''} ${ami.nom ?? ''}`.trim()}</p>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <!-- CONTENU PRINCIPAL -->
+      <div class={`flex-1 bg-neutral-200${themeUrl ? ' theme-active' : ''}`} style={themeUrl ? `background-image:url('${themeUrl}');background-size:cover;background-position:center;background-attachment:local;` : ''}>
+
+        <!-- BARRE D'ONGLETS BLANCHE -->
+        <div class="bg-white flex items-stretch lg:px-20 shadow-md h-14 lg:h-25">
+          <div id="tab-list" class="relative flex items-stretch flex-1 lg:flex-none h-full overflow-x-auto">
+            <button data-tab="profil"
+              class="tab-btn flex-1 lg:flex-none lg:px-6.25 h-full text-3.5 lg:text-4 font-medium text-black cursor-pointer bg-transparent border-0 whitespace-nowrap flex items-center justify-center">
+              Mon profil
+            </button>
+            <button data-tab="amis"
+              class="tab-btn lg:hidden flex-1 h-full text-3.5 font-medium text-black cursor-pointer bg-transparent border-0 whitespace-nowrap flex items-center justify-center">
+              Amis
+            </button>
+            <button data-tab="inventaire"
+              class="tab-btn flex-1 lg:flex-none lg:px-6.25 h-full text-3.5 lg:text-4 font-medium text-black cursor-pointer bg-transparent border-0 whitespace-nowrap flex items-center justify-center">
+              Inventaire
+            </button>
+            <button data-tab="notifications"
+              class="tab-btn flex-1 lg:flex-none lg:px-6.25 h-full text-3.5 lg:text-4 font-medium text-black cursor-pointer bg-transparent border-0 inline-flex items-center justify-center gap-2 whitespace-nowrap">
+              <Image src={notifIcon} alt="Notifications" width={20} height={20} class="block lg:hidden" />
+              <span class="hidden lg:block">Notifications</span>
+              {(unreadNotifs + demandeAmies.length + demandeSession.length) > 0 && (
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white text-2.75 font-bold">{unreadNotifs + demandeAmies.length + demandeSession.length}</span>
+              )}
+            </button>
+            <button data-tab="parametres"
+              class="tab-btn flex-1 lg:flex-none lg:px-6.25 h-full text-3.5 lg:text-4 font-medium text-black cursor-pointer bg-transparent border-0 whitespace-nowrap flex items-center justify-center">
+              <Image src={settingsIcon} alt="Paramètres" width={20} height={20} class="block lg:hidden brightness-0" />
+              <span class="hidden lg:block">Paramètres</span>
+            </button>
+            <!-- Trait animé -->
+            <div id="tab-indicator" class="absolute bottom-0 h-1.5 rounded-full" style="background:#72c073; transition: left 0.3s cubic-bezier(.4,0,.2,1), width 0.3s cubic-bezier(.4,0,.2,1); left:0; width:0;"></div>
+          </div>
+
+          <!-- Editer / Annuler (desktop only) -->
+          <button id="edit-btn"
+            class="hidden lg:flex ml-auto bg-primary-600 h-12.75 w-64.25 items-center justify-center text-white text-4 font-medium hover:brightness-110 active:scale-[0.97] transition-all cursor-pointer border-0 self-center">
+            Editer le profil
+          </button>
+          <button id="cancel-btn" style="display: none;"
+            class="ml-auto border-2 border-primary-600 text-primary-600 h-12.75 w-64.25 flex items-center justify-center text-4 font-medium hover:bg-primary-600 hover:text-white transition-colors cursor-pointer bg-transparent self-center">
+            Annuler
+          </button>
+        </div>
+
+        <!-- ============================= -->
+        <!-- PANEL : MON PROFIL           -->
+        <!-- ============================= -->
+        <div id="panel-profil" data-panel class={activeTab !== 'profil' ? 'hidden' : ''}>
+          <div class="px-4 lg:px-20 pt-8 lg:pt-11.25 pb-16 lg:pb-30">
+
+            {updateSuccess && <p class="text-primary-600 text-sm font-medium mb-6 m-0">Profil mis à jour avec succès.</p>}
+            {updateError   && <p class="text-red-500 text-sm font-medium mb-6 m-0">{updateError}</p>}
+
+            <!-- H2 Données du compte + ligne décorative -->
+            <div class="flex items-center gap-7.5 mb-11.25">
+              <h2 class="text-black m-0 shrink-0">Données du compte</h2>
+              <div class="flex-1 h-0.5 bg-neutral-300"></div>
+            </div>
+
+            <form method="POST" enctype="multipart/form-data" id="profile-form">
+              <input type="hidden" name="_action" value="edit" />
+
+              <!-- Box 1 : Informations personnelles -->
+              <div class="bg-white border-0.75 border-neutral-300 rounded-2.5 px-4 lg:px-7.5 py-5.5 mb-4.5">
+                <h3 class="text-black m-0 mb-8.75">Informations personnel</h3>
+                <div class="flex flex-col lg:flex-row gap-4 lg:gap-25">
+                  <div class="flex flex-col gap-1">
+                    <span class="text-neutral-500 text-4 font-medium leading-snug">Ville</span>
+                    <span class="view-field text-black text-4 font-medium leading-snug">{user.ville ?? '—'}</span>
+                    <input type="text" name="ville" value={user.ville ?? ''} placeholder="Ville"
+                      class="edit-field hidden text-4 font-medium text-neutral-800 bg-neutral-200 border border-neutral-300 rounded px-3 py-1 outline-none w-35" />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-neutral-500 text-4 font-medium leading-snug">Âge</span>
+                    <span class="view-field text-black text-4 font-medium leading-snug">{user.age ? `${user.age} ans` : '—'}</span>
+                    <input type="number" name="age" value={user.age ?? ''} placeholder="Âge" min="13" max="120"
+                      class="edit-field hidden text-4 font-medium text-neutral-800 bg-neutral-200 border border-neutral-300 rounded px-3 py-1 outline-none w-25" />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-neutral-500 text-4 font-medium leading-snug">Membre depuis</span>
+                    <span class="text-black text-4 font-medium leading-snug">{createdAt}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Box 2 : Activité sur Bargo -->
+              <div class="bg-white border-0.75 border-neutral-300 rounded-2.5 px-4 lg:px-7.5 py-5.5 mb-4.5">
+                <h3 class="text-black m-0 mb-8.75">Activité sur Bargo</h3>
+                <div class="flex flex-col lg:flex-row gap-4 lg:gap-25">
+                  <div class="flex flex-col gap-1">
+                    <span class="text-neutral-500 text-4 font-medium leading-snug">Sorties organisées</span>
+                    <span class="text-black text-4 font-medium leading-snug">
+                      {user.barathon_organiser ? `${user.barathon_organiser} sorties` : '—'}
+                    </span>
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-neutral-500 text-4 font-medium leading-snug">Barathons réalisés</span>
+                    <span class="text-black text-4 font-medium leading-snug">
+                      {user.barathon_participer ? `${user.barathon_participer} parcours` : '—'}
+                    </span>
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-neutral-500 text-4 font-medium leading-snug">Bars découverts</span>
+                    <span class="text-black text-4 font-medium leading-snug">{barDecouver.length}/{totalBars}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Box 3 : Réseaux sociaux -->
+              <div class="bg-white border-0.75 border-neutral-300 rounded-2.5 px-4 lg:px-7.5 py-5.5">
+                <h3 class="text-black m-0 mb-8.75">Réseaux sociaux</h3>
+                <div class="flex flex-wrap gap-10">
+                  <div class="flex flex-col gap-1">
+                    <span class="text-neutral-500 text-4 font-medium leading-snug">Instagram</span>
+                    <div class="view-field flex items-center gap-2">
+                      <Image src={instaIcon} alt="" width={18} height={18} />
+                      <span class="text-black text-4 font-medium leading-snug">{user.insta || '—'}</span>
+                    </div>
+                    <input type="text" name="insta" value={user.insta ?? ''} placeholder="@pseudo"
+                      class="edit-field hidden text-4 font-medium text-neutral-800 bg-neutral-200 border border-neutral-300 rounded px-3 py-1 outline-none w-40" />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-neutral-500 text-4 font-medium leading-snug">Facebook</span>
+                    <div class="view-field flex items-center gap-2">
+                      <Image src={facebookIcon} alt="" width={18} height={18} />
+                      <span class="text-black text-4 font-medium leading-snug">{user.facbook || '—'}</span>
+                    </div>
+                    <input type="text" name="facbook" value={user.facbook ?? ''} placeholder="Nom Facebook"
+                      class="edit-field hidden text-4 font-medium text-neutral-800 bg-neutral-200 border border-neutral-300 rounded px-3 py-1 outline-none w-40" />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-neutral-500 text-4 font-medium leading-snug">Discord</span>
+                    <div class="view-field flex items-center gap-2">
+                      <Image src={discordIcon} alt="" width={18} height={18} />
+                      <span class="text-black text-4 font-medium leading-snug">{user.discord || '—'}</span>
+                    </div>
+                    <input type="text" name="discord" value={user.discord ?? ''} placeholder="@pseudo"
+                      class="edit-field hidden text-4 font-medium text-neutral-800 bg-neutral-200 border border-neutral-300 rounded px-3 py-1 outline-none w-40" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Champs édition étendus (nom, prénom, pseudo, description, avatar) -->
+              <div class="edit-field hidden mt-7.5"><div class="flex flex-col gap-5">
+                <div class="flex gap-6 flex-wrap">
+                  <div class="flex flex-col gap-1">
+                    <label class="text-4 font-medium text-black">Prénom</label>
+                    <input type="text" name="prenom" value={user.prenom ?? ''} placeholder="Prénom"
+                      class="text-4 font-medium text-neutral-800 bg-neutral-200 border border-neutral-300 rounded px-3 py-2 outline-none w-50" />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class="text-4 font-medium text-black">Nom</label>
+                    <input type="text" name="nom" value={user.nom ?? ''} placeholder="Nom"
+                      class="text-4 font-medium text-neutral-800 bg-neutral-200 border border-neutral-300 rounded px-3 py-2 outline-none w-50" />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class="text-4 font-medium text-black">Pseudo</label>
+                    <input type="text" name="pseudo" value={user.pseudo ?? ''} placeholder="Pseudo"
+                      class="text-4 font-medium text-neutral-800 bg-neutral-200 border border-neutral-300 rounded px-3 py-2 outline-none w-50" />
+                  </div>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-4 font-medium text-black">Description</label>
+                  <textarea name="description" placeholder="Votre description..."
+                    class="text-4 font-medium text-neutral-800 bg-neutral-200 border border-neutral-300 rounded px-3 py-2 outline-none resize-none w-full max-w-150 h-25">{user.description ?? ''}</textarea>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-4 font-medium text-black">Photo de profil</label>
+                  <input id="avatar-upload" type="file" name="avatar" accept="image/*"
+                    class="text-sm text-neutral-500 file:mr-4 file:py-2 file:px-4 file:border-0 file:bg-primary-600 file:text-white file:cursor-pointer cursor-pointer" />
+                </div>
+                <button type="submit"
+                  class="inline-flex items-center gap-4 bg-primary-900 text-white text-4 font-medium leading-snug px-12.5 py-2 hover:opacity-90 transition-opacity cursor-pointer border-0 w-fit">
+                  Sauvegarder
+                </button>
+              </div></div>
+            </form>
+
+            <!-- H2 Favoris + ligne décorative -->
+            <div class="flex items-center gap-7.5 mt-20 mb-14">
+              <h2 class="text-black m-0 shrink-0">Favoris</h2>
+              <div class="flex-1 h-0.5 bg-neutral-300"></div>
+            </div>
+
+            <!-- Grille favoris -->
+            <!-- Bars favoris -->
+            {barsFavori.length > 0 ? (
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-8.25">
+                {barsFavori.map(bar => (
+                  <div class="relative bg-white rounded-0.5 h-87.75 shadow-md">
+                    <div class="absolute top-0 left-0 right-0 h-50 overflow-hidden rounded-tl-0.5 rounded-tr-0.5">
+                      <PbImage record={bar} recordImage={bar.img?.[0]} width={280} height={200} class="w-full h-full object-cover" />
+                    </div>
+                    <h3 class="absolute top-52.5 left-4.75 right-4.75 m-0 text-black">{bar.nom}</h3>
+                    <button class="like-btn-bar absolute bottom-5.25 right-5.25 w-6 h-6 flex items-center justify-center bg-transparent border-0 cursor-pointer p-0" data-id={bar.id} type="button" aria-label="Retirer des favoris">
+                      <Image src={heartIcon}    alt="" width={24} height={24} class="like-empty hidden" />
+                      <Image src={likeFillIcon} alt="" width={24} height={24} class="like-filled" />
+                    </button>
+                    <a href={`/bar/${bar.id}`}
+                      class="absolute bottom-5.25 left-4.75 w-37.5 h-11 bg-neutral-800 flex items-center justify-center text-white text-4 font-medium hover:opacity-80 transition-opacity">
+                      En savoir plus
+                    </a>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p class="text-neutral-500 text-4 font-medium m-0">Aucun bar favori pour l'instant.</p>
+            )}
+
+            <!-- H2 Jeux favoris + ligne décorative -->
+            <div class="flex items-center gap-7.5 mt-20 mb-14">
+              <h2 class="text-black m-0 shrink-0">Jeux favoris</h2>
+              <div class="flex-1 h-0.5 bg-neutral-300"></div>
+            </div>
+
+            {jeuxFavori.length > 0 ? (
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-8.25">
+                {jeuxFavori.map(jeu => {
+                  const imgFile = Array.isArray(jeu.img) ? jeu.img[0] : jeu.img;
+                  return (
+                    <div class="relative bg-white rounded-0.5 h-87.75 shadow-md">
+                      <div class="absolute top-0 left-0 right-0 h-50 overflow-hidden rounded-tl-0.5 rounded-tr-0.5">
+                        <PbImage record={jeu} recordImage={imgFile} width={280} height={200} class="w-full h-full object-cover" />
+                      </div>
+                      <h3 class="absolute top-52.5 left-4.75 right-4.75 m-0 text-black">{jeu.nom}</h3>
+                      <button class="like-btn-jeux absolute bottom-5.25 right-5.25 w-6 h-6 flex items-center justify-center bg-transparent border-0 cursor-pointer p-0" data-id={jeu.id} type="button" aria-label="Retirer des favoris">
+                        <Image src={heartIcon}    alt="" width={24} height={24} class="like-empty hidden" />
+                        <Image src={likeFillIcon} alt="" width={24} height={24} class="like-filled" />
+                      </button>
+                      <a href="/jeux"
+                        class="absolute bottom-5.25 left-4.75 w-37.5 h-11 bg-neutral-800 flex items-center justify-center text-white text-4 font-medium hover:opacity-80 transition-opacity">
+                        Voir les jeux
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p class="text-neutral-500 text-4 font-medium m-0">Aucun jeu favori pour l'instant.</p>
+            )}
+
+            <!-- H2 Boissons favorites + ligne décorative -->
+            <div class="flex items-center gap-7.5 mt-20 mb-14">
+              <h2 class="text-black m-0 shrink-0">Boissons favorites</h2>
+              <div class="flex-1 h-0.5 bg-neutral-300"></div>
+            </div>
+
+            {boissonsFavori.length > 0 ? (
+              <div class="grid grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-8.25">
+                {boissonsFavori.map(b => (
+                  <div class="relative bg-white rounded-0.5 shadow-md" style="height: 270px;">
+                    <div class="absolute top-0 left-0 right-0 h-44 overflow-hidden rounded-tl-0.5 rounded-tr-0.5 bg-neutral-500">
+                      <PbImage record={b} recordImage={b.img} alt={b.nom} class="w-full h-full object-cover" />
+                    </div>
+                    <h3 class="absolute left-4.75 right-4.75 m-0 text-black truncate" style="top: 190px;">{b.nom}</h3>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p class="text-neutral-500 text-4 font-medium m-0">Aucune boisson favorite pour l'instant.</p>
+            )}
+
+          </div>
+        </div>
+
+        <!-- ============================= -->
+        <!-- PANEL : NOTIFICATIONS        -->
+        <!-- ============================= -->
+        <div id="panel-notifications" data-panel class={activeTab !== 'notifications' ? 'hidden' : ''}>
+          <div class="px-4 lg:px-20 pt-8 lg:pt-11.25 pb-16 lg:pb-30">
+
+            <div class="flex items-center gap-7.5 mb-11.25">
+              <h2 class="text-black m-0 shrink-0">Notifications</h2>
+              <div class="flex-1 h-0.5 bg-neutral-300"></div>
+            </div>
+
+            {demandeAmies.length > 0 && (
+              <div id="friend-requests-section" class="mb-8">
+                <h3 class="text-black m-0 mb-5">Demandes d'amis ({demandeAmies.length})</h3>
+                <div class="flex flex-col gap-3">
+                  {demandeAmies.map(requester => (
+                    <div class="friend-request-item flex items-center gap-4 p-5 bg-white rounded-2.5 border-0.75 border-primary-500" data-friend-id={requester.id}>
+                      <div class="w-12 h-12 rounded-full overflow-hidden shrink-0 bg-neutral-800 flex items-center justify-center">
+                        {requester.avatar
+                          ? <PbImage record={requester} recordImage={requester.avatar} alt="" class="w-full h-full object-cover" />
+                          : <span class="text-white font-bold text-5">{(requester.pseudo || requester.prenom || '?')[0].toUpperCase()}</span>
+                        }
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <p class="text-4 font-medium text-black m-0">
+                          <strong>{requester.pseudo || `${requester.prenom} ${requester.nom}`.trim() || 'Utilisateur'}</strong> vous a envoyé une demande d'ami
+                        </p>
+                      </div>
+                      <div class="flex gap-2 shrink-0">
+                        <button class="friend-accept bg-primary-600 text-white text-3.5 font-medium px-4 py-2 cursor-pointer border-0 rounded hover:opacity-90 transition-opacity">Accepter</button>
+                        <button class="friend-refuse border-2 border-neutral-300 text-neutral-500 text-3.5 font-medium px-4 py-2 cursor-pointer bg-transparent rounded hover:border-neutral-500 transition-colors">Refuser</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {demandeSession.length > 0 && (
+              <div id="session-requests-section" class="mb-8">
+                <h3 class="text-black m-0 mb-5">Invitations de session ({demandeSession.length})</h3>
+                <div class="flex flex-col gap-3">
+                  {demandeSession.map(s => (
+                    <div class="session-invite-item flex items-center gap-4 p-5 bg-white rounded-2.5 border-0.75 border-primary-500" data-session-id={s.id}>
+                      <div class="w-12 h-12 rounded-full flex items-center justify-center shrink-0 bg-primary-900">
+                        <Image src={bellIcon} alt="" width={20} height={20} class="brightness-0 invert" />
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <p class="text-4 font-medium text-black m-0">
+                          Invitation au barathon <strong>{s.nom}</strong>
+                        </p>
+                        {s.date && (
+                          <p class="text-sm text-neutral-500 m-0 mt-0.5">
+                            {new Date(s.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </p>
+                        )}
+                      </div>
+                      <div class="flex gap-2 shrink-0">
+                        <button class="session-invite-accept bg-primary-600 text-white text-3.5 font-medium px-4 py-2 cursor-pointer border-0 rounded hover:opacity-90 transition-opacity" data-session-href={`/session/${s.id}`}>Accepter</button>
+                        <button class="session-invite-refuse border-2 border-neutral-300 text-neutral-500 text-3.5 font-medium px-4 py-2 cursor-pointer bg-transparent rounded hover:border-neutral-500 transition-colors">Refuser</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {notifications.length > 0 ? (
+              <div class="flex flex-col gap-3">
+                {notifications.map(notif => (
+                  <div class={`flex items-start gap-4 p-5 bg-white rounded-2.5 border-0.75 ${!notif.lu ? 'border-primary-500' : 'border-neutral-300'}`}>
+                    <div class={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${notif.type === 'success' ? 'bg-primary-500' : 'bg-primary-600'}`}>
+                      <Image src={bellIcon} alt="" width={18} height={18} class="brightness-0 invert" />
+                    </div>
+                    <div class="flex-1">
+                      <p class={`text-4 m-0 leading-snug ${!notif.lu ? 'font-bold' : 'font-medium'} text-black`}>
+                        {notif.message ?? notif.texte ?? notif.contenu ?? 'Notification'}
+                      </p>
+                      <p class="text-sm text-neutral-500 m-0 mt-1">{timeAgo(notif.created)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div class="flex flex-col items-center justify-center py-24">
+                <div class="w-20 h-20 rounded-full bg-neutral-300 flex items-center justify-center mb-6">
+                  <Image src={bellIcon} alt="" width={32} height={32} style="filter:invert(41%) sepia(6%) saturate(228%) hue-rotate(314deg) brightness(95%) contrast(88%)" />
+                </div>
+                <p class="text-neutral-500 text-4 font-medium m-0">Aucune notification</p>
+                <p class="text-sm text-neutral-500 m-0 mt-2">Vous êtes à jour !</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <!-- ============================= -->
+        <!-- PANEL : INVENTAIRE           -->
+        <!-- ============================= -->
+        <div id="panel-inventaire" data-panel class={activeTab !== 'inventaire' ? 'hidden' : ''}>
+          <div class="px-4 lg:px-20 pt-8 lg:pt-11.25 pb-16 lg:pb-30">
+
+            <div class="flex items-center gap-7.5 mb-11.25">
+              <h2 class="text-black m-0 shrink-0">Inventaire</h2>
+              <div class="flex-1 h-0.5 bg-neutral-300"></div>
+            </div>
+
+            {(possedDecorations.length + possedTitres.length + possedThemes.length) === 0 && itemsFavori.length === 0 ? (
+              <div class="flex flex-col items-center justify-center py-16 gap-5">
+                <div class="w-20 h-20 rounded-full bg-neutral-300 flex items-center justify-center">
+                  <Image src={panierIcon} alt="" width={32} height={32} style="filter:invert(41%) sepia(6%) saturate(228%) hue-rotate(314deg) brightness(95%) contrast(88%)" />
+                </div>
+                <div class="text-center">
+                  <p class="text-black text-4 font-bold m-0 mb-1">Votre inventaire est vide</p>
+                  <p class="text-neutral-500 text-sm m-0">Visitez la boutique pour obtenir des articles.</p>
+                </div>
+                <a href="/boutique" class="inline-flex items-center justify-center h-12 px-8 bg-neutral-800 text-white text-4 font-medium hover:opacity-90 transition-opacity no-underline">
+                  Visiter la boutique <Image src={arrowRightLg} alt="" width={18} height={18} class="inline-block align-middle" />
+                </a>
+              </div>
+            ) : (
+              <div class="flex flex-col gap-12">
+
+                {/* ── Favoris ── */}
+                {itemsFavori.length > 0 && (() => {
+                  return (
+                    <div>
+                      <div class="flex items-center gap-7.5 mb-8">
+                        <h3 class="text-black m-0 shrink-0">Favoris <span class="text-neutral-500 font-medium">({itemsFavori.length})</span></h3>
+                        <div class="flex-1 h-0.5 bg-neutral-300"></div>
+                      </div>
+                      <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-8">
+                        {itemsFavori.map(item => {
+                          const isPossessed =
+                            item.type === 'decoration_avatar' ? possedDecorations.some(d => d.id === item.id)
+                            : item.type === 'titre'           ? possedTitres.some(t => t.id === item.id)
+                                                              : possedThemes.some(t => t.id === item.id);
+                          const isEquipped =
+                            item.type === 'decoration_avatar' ? decoRecord?.id === item.id
+                            : item.type === 'titre'           ? titreRecord?.id === item.id
+                                                              : themeRecord?.id === item.id;
+                          return (
+                            <div data-inv-card={item.id} class={`bg-white rounded-0.5 shadow-sm overflow-hidden relative${isEquipped ? ' ring-2 ring-primary-500' : ''}`}>
+                              <div class="h-36 lg:h-44 bg-neutral-500 flex items-center justify-center relative">
+                                {item.type === 'titre' ? (
+                                  <div class="size-20 rounded-full bg-primary-900 flex items-center justify-center px-2">
+                                    <p class="text-white font-bold text-3 text-center m-0 leading-snug">{item.type_titre || item.nom}</p>
+                                  </div>
+                                ) : item.imageUrl ? (
+                                  <div class="size-20 rounded-full overflow-hidden">
+                                    <PbImage src={item.imageUrl} alt={item.nom} class="w-full h-full object-cover" />
+                                  </div>
+                                ) : (
+                                  <div class="size-20 rounded-full bg-neutral-600"></div>
+                                )}
+                                <span class={`inv-equipped-badge absolute top-2 left-2 bg-primary-500 text-primary-900 text-2.5 font-bold px-2 py-0.5${isEquipped ? '' : ' hidden'}`}>Équipé</span>
+                                {!isPossessed && (
+                                  <span class="absolute top-2 right-2 bg-black/50 text-white text-2.5 font-medium px-2 py-0.5">Non possédé</span>
+                                )}
+                              </div>
+                              <div class="p-4">
+                                <h3 class="m-0 text-black text-sm mb-3 truncate">{item.nom}</h3>
+                                {isPossessed ? (
+                                  <>
+                                    <div class={`inv-equipped-state${isEquipped ? '' : ' hidden'}`}>
+                                      <div class="w-full h-8 bg-primary-600 flex items-center justify-center mb-2">
+                                        <span class="text-white text-3.5 font-medium">✓ Équipé</span>
+                                      </div>
+                                      <button class="inv-unequip-btn w-full h-9 border border-neutral-300 text-neutral-500 text-3.5 font-medium bg-transparent cursor-pointer hover:border-neutral-800 hover:text-neutral-800 transition-colors"
+                                        data-item-id={item.id} data-item-type={item.type}>Déséquiper</button>
+                                    </div>
+                                    <button class={`inv-equip-btn w-full h-12 bg-primary-900 text-white text-4 font-medium border-0 cursor-pointer hover:opacity-90 transition-opacity${isEquipped ? ' hidden' : ''}`}
+                                      data-item-id={item.id} data-item-type={item.type}>Équiper</button>
+                                  </>
+                                ) : (
+                                  <a href="/boutique" class="w-full h-12 bg-neutral-800 text-white text-4 font-medium flex items-center justify-center no-underline hover:opacity-90 transition-opacity">
+                                    Voir en boutique
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* ── Décorations possédées ── */}
+                {possedDecorations.length > 0 && (
+                  <div>
+                    <div class="flex items-center gap-7.5 mb-8">
+                      <h3 class="text-black m-0 shrink-0">Décorations <span class="text-neutral-500 font-medium">({possedDecorations.length})</span></h3>
+                      <div class="flex-1 h-0.5 bg-neutral-300"></div>
+                    </div>
+                    <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-8">
+                      {possedDecorations.map(item => (
+                        <div data-inv-card={item.id} class={`bg-white rounded-0.5 shadow-sm overflow-hidden relative${item.isEquipped ? ' ring-2 ring-primary-500' : ''}`}>
+                          <div class="h-36 lg:h-44 bg-neutral-500 flex items-center justify-center relative">
+                            {item.imageUrl ? (
+                              <div class="size-20 rounded-full overflow-hidden">
+                                <PbImage src={item.imageUrl} alt={item.nom} class="w-full h-full object-cover" />
+                              </div>
+                            ) : (
+                              <div class="size-20 rounded-full bg-neutral-600"></div>
+                            )}
+                            <span class={`inv-equipped-badge absolute top-2 left-2 bg-primary-500 text-primary-900 text-2.5 font-bold px-2 py-0.5${item.isEquipped ? '' : ' hidden'}`}>Équipé</span>
+                          </div>
+                          <div class="p-4">
+                            <h3 class="m-0 text-black text-sm mb-3 truncate">{item.nom}</h3>
+                            <div class={`inv-equipped-state${item.isEquipped ? '' : ' hidden'}`}>
+                              <div class="w-full h-8 bg-primary-600 flex items-center justify-center mb-2">
+                                <span class="text-white text-3.5 font-medium">✓ Équipé</span>
+                              </div>
+                              <button class="inv-unequip-btn w-full h-9 border border-neutral-300 text-neutral-500 text-3.5 font-medium bg-transparent cursor-pointer hover:border-neutral-800 hover:text-neutral-800 transition-colors"
+                                data-item-id={item.id} data-item-type="decoration_avatar">Déséquiper</button>
+                            </div>
+                            <button class={`inv-equip-btn w-full h-12 bg-primary-900 text-white text-4 font-medium border-0 cursor-pointer hover:opacity-90 transition-opacity${item.isEquipped ? ' hidden' : ''}`}
+                              data-item-id={item.id} data-item-type="decoration_avatar">Équiper</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Titres possédés ── */}
+                {possedTitres.length > 0 && (
+                  <div>
+                    <div class="flex items-center gap-7.5 mb-8">
+                      <h3 class="text-black m-0 shrink-0">Titres <span class="text-neutral-500 font-medium">({possedTitres.length})</span></h3>
+                      <div class="flex-1 h-0.5 bg-neutral-300"></div>
+                    </div>
+                    <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-8">
+                      {possedTitres.map(item => (
+                        <div data-inv-card={item.id} class={`bg-white rounded-0.5 shadow-sm overflow-hidden relative${item.isEquipped ? ' ring-2 ring-primary-500' : ''}`}>
+                          <div class="h-36 lg:h-44 bg-neutral-500 flex items-center justify-center relative">
+                            <div class="size-20 rounded-full bg-primary-900 flex items-center justify-center px-2">
+                              <p class="text-white font-bold text-3 text-center m-0 leading-snug">{item.type_titre || item.nom}</p>
+                            </div>
+                            <span class={`inv-equipped-badge absolute top-2 left-2 bg-primary-500 text-primary-900 text-2.5 font-bold px-2 py-0.5${item.isEquipped ? '' : ' hidden'}`}>Équipé</span>
+                          </div>
+                          <div class="p-4">
+                            <h3 class="m-0 text-black text-sm mb-3 truncate">{item.nom}</h3>
+                            <div class={`inv-equipped-state${item.isEquipped ? '' : ' hidden'}`}>
+                              <div class="w-full h-8 bg-primary-600 flex items-center justify-center mb-2">
+                                <span class="text-white text-3.5 font-medium">✓ Équipé</span>
+                              </div>
+                              <button class="inv-unequip-btn w-full h-9 border border-neutral-300 text-neutral-500 text-3.5 font-medium bg-transparent cursor-pointer hover:border-neutral-800 hover:text-neutral-800 transition-colors"
+                                data-item-id={item.id} data-item-type="titre">Déséquiper</button>
+                            </div>
+                            <button class={`inv-equip-btn w-full h-12 bg-primary-900 text-white text-4 font-medium border-0 cursor-pointer hover:opacity-90 transition-opacity${item.isEquipped ? ' hidden' : ''}`}
+                              data-item-id={item.id} data-item-type="titre">Équiper</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Thèmes possédés ── */}
+                {possedThemes.length > 0 && (
+                  <div>
+                    <div class="flex items-center gap-7.5 mb-8">
+                      <h3 class="text-black m-0 shrink-0">Thèmes <span class="text-neutral-500 font-medium">({possedThemes.length})</span></h3>
+                      <div class="flex-1 h-0.5 bg-neutral-300"></div>
+                    </div>
+                    <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-8">
+                      {possedThemes.map(item => (
+                        <div data-inv-card={item.id} class={`bg-white rounded-0.5 shadow-sm overflow-hidden relative${item.isEquipped ? ' ring-2 ring-primary-500' : ''}`}>
+                          <div class="h-36 lg:h-44 bg-neutral-500 flex items-center justify-center relative">
+                            {item.imageUrl ? (
+                              <div class="size-20 rounded-full overflow-hidden">
+                                <PbImage src={item.imageUrl} alt={item.nom} class="w-full h-full object-cover" />
+                              </div>
+                            ) : (
+                              <div class="size-20 rounded-full bg-neutral-600"></div>
+                            )}
+                            <span class={`inv-equipped-badge absolute top-2 left-2 bg-primary-500 text-primary-900 text-2.5 font-bold px-2 py-0.5${item.isEquipped ? '' : ' hidden'}`}>Équipé</span>
+                          </div>
+                          <div class="p-4">
+                            <h3 class="m-0 text-black text-sm mb-3 truncate">{item.nom}</h3>
+                            <div class={`inv-equipped-state${item.isEquipped ? '' : ' hidden'}`}>
+                              <div class="w-full h-8 bg-primary-600 flex items-center justify-center mb-2">
+                                <span class="text-white text-3.5 font-medium">✓ Équipé</span>
+                              </div>
+                              <button class="inv-unequip-btn w-full h-9 border border-neutral-300 text-neutral-500 text-3.5 font-medium bg-transparent cursor-pointer hover:border-neutral-800 hover:text-neutral-800 transition-colors"
+                                data-item-id={item.id} data-item-type="theme">Déséquiper</button>
+                            </div>
+                            <button class={`inv-equip-btn w-full h-12 bg-primary-900 text-white text-4 font-medium border-0 cursor-pointer hover:opacity-90 transition-opacity${item.isEquipped ? ' hidden' : ''}`}
+                              data-item-id={item.id} data-item-type="theme">Équiper</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            )}
+
+          </div>
+
+          <div id="inv-toast" style="position:fixed;bottom:100px;left:50%;transform:translateX(-50%) translateY(20px);background:#1E1E1E;color:white;padding:12px 24px;border-radius:8px;font-size:14px;font-family:'Inter',sans-serif;font-weight:500;opacity:0;transition:opacity 0.25s,transform 0.25s;pointer-events:none;z-index:300;white-space:nowrap;"></div>
+        </div>
+
+        <!-- ============================= -->
+        <!-- PANEL : PARAMÈTRES           -->
+        <!-- ============================= -->
+        <div id="panel-parametres" data-panel class={activeTab !== 'parametres' ? 'hidden' : ''}>
+          <div class="px-4 lg:px-20 pt-8 lg:pt-11.25 pb-16 lg:pb-30">
+
+            <div class="flex flex-col lg:flex-row lg:items-center lg:gap-7.5 mb-8 lg:mb-11.25 gap-3">
+              <div class="flex items-center gap-4 lg:contents">
+                <h2 class="text-black m-0 shrink-0">Paramètres</h2>
+                {user.admin && (
+                  <a href="/admin" class="lg:hidden shrink-0 inline-flex items-center justify-center h-10 px-5 bg-primary-900 text-white text-sm font-semibold rounded-sm hover:opacity-80 transition-opacity">
+                    Panneau admin
+                  </a>
+                )}
+              </div>
+              <div class="flex-1 h-0.5 bg-neutral-300"></div>
+              {user.admin && (
+                <a href="/admin" class="hidden lg:inline-flex shrink-0 items-center justify-center h-10 px-6 bg-primary-900 text-white text-sm font-semibold rounded-sm hover:opacity-80 transition-opacity">
+                  Panneau admin
+                </a>
+              )}
+            </div>
+
+            <!-- Email -->
+            <h3 class="text-black m-0 mb-5">Email</h3>
+            <div class="bg-white border-0.75 border-neutral-300 rounded-2.5 px-7.5 py-5.5 mb-8">
+              <div class="flex items-center border-b-2 border-neutral-300 pb-4 mb-5 min-w-0">
+                <span class="text-4 font-medium text-black w-28 lg:w-40 shrink-0">Email actuel</span>
+                <span class="text-4 font-medium text-neutral-500 truncate min-w-0">{user.email ?? '—'}</span>
+              </div>
+              {emailSuccess && <p class="text-primary-600 text-sm font-medium mb-4 m-0">Email mis à jour.</p>}
+              {emailError   && <p class="text-red-500 text-sm font-medium mb-4 m-0">{emailError}</p>}
+              <form method="POST" enctype="application/x-www-form-urlencoded" class="flex flex-col lg:flex-row lg:items-end gap-4">
+                <input type="hidden" name="_action" value="change_email" />
+                <div class="flex-1">
+                  <label class="block text-4 font-medium text-black mb-2">Nouvel email</label>
+                  <input type="email" name="new_email" placeholder="nouveau@email.com"
+                    class="w-full text-4 font-medium bg-neutral-200 border-2 border-neutral-300 rounded px-4 py-2 outline-none" />
+                </div>
+                <button type="submit"
+                  class="bg-primary-600 text-white text-4 font-medium px-8 py-2.25 hover:opacity-90 transition-opacity cursor-pointer border-0 rounded shrink-0">
+                  Modifier
+                </button>
+              </form>
+            </div>
+
+            <!-- Mot de passe -->
+            <h3 class="text-black m-0 mb-5">Sécurité</h3>
+            <div class="bg-white border-0.75 border-neutral-300 rounded-2.5 px-7.5 py-5.5 mb-8">
+              {pwdSuccess && <p class="text-primary-600 text-sm font-medium mb-4 m-0">Mot de passe modifié.</p>}
+              {pwdError   && <p class="text-red-500 text-sm font-medium mb-4 m-0">{pwdError}</p>}
+              <form method="POST" enctype="application/x-www-form-urlencoded" class="flex flex-col gap-5">
+                <input type="hidden" name="_action" value="change_password" />
+                <div>
+                  <label class="block text-4 font-medium text-black mb-2">Mot de passe actuel</label>
+                  <input type="password" name="old_password" placeholder="••••••••"
+                    class="w-full max-w-100 text-4 font-medium bg-neutral-200 border-2 border-neutral-300 rounded px-4 py-2 outline-none" />
+                </div>
+                <div class="flex flex-col lg:flex-row gap-4">
+                  <div class="flex-1">
+                    <label class="block text-4 font-medium text-black mb-2">Nouveau mot de passe</label>
+                    <input type="password" name="new_password" placeholder="••••••••"
+                      class="w-full text-4 font-medium bg-neutral-200 border-2 border-neutral-300 rounded px-4 py-2 outline-none" />
+                  </div>
+                  <div class="flex-1">
+                    <label class="block text-4 font-medium text-black mb-2">Confirmer</label>
+                    <input type="password" name="confirm_password" placeholder="••••••••"
+                      class="w-full text-4 font-medium bg-neutral-200 border-2 border-neutral-300 rounded px-4 py-2 outline-none" />
+                  </div>
+                </div>
+                <button type="submit"
+                  class="inline-flex items-center gap-3 bg-primary-900 text-white text-4 font-medium px-8 py-2.25 hover:opacity-90 transition-opacity cursor-pointer border-0 rounded w-fit">
+                  Changer le mot de passe
+                </button>
+              </form>
+            </div>
+
+            <!-- Session -->
+            <h3 class="text-black m-0 mb-5">Session</h3>
+            <div class="bg-white border-0.75 border-neutral-300 rounded-2.5 px-7.5 py-5.5 mb-8">
+              <p class="text-4 font-medium text-black m-0 mb-4">
+                Connecté en tant que <span class="text-primary-500">{user.pseudo ?? user.email}</span>
+              </p>
+              <form method="POST" enctype="application/x-www-form-urlencoded">
+                <input type="hidden" name="_action" value="logout" />
+                <button type="submit"
+                  class="inline-flex items-center gap-3 border-2 border-neutral-800 text-neutral-800 text-4 font-medium px-8 py-2.25 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer bg-transparent rounded">
+                  Se déconnecter
+                </button>
+              </form>
+            </div>
+
+            <!-- Zone dangereuse -->
+            <h3 class="text-black m-0 mb-5">Zone dangereuse</h3>
+            <div class="bg-white rounded-2.5 px-7.5 py-5.5" style="border: 3px solid #fecaca;">
+              <div class="flex items-center justify-between gap-8">
+                <div>
+                  <p class="text-4 font-medium text-black m-0">Supprimer mon compte</p>
+                  <p class="text-sm text-neutral-500 m-0 mt-1">Action irréversible. Toutes vos données seront supprimées définitivement.</p>
+                </div>
+                <form method="POST" enctype="application/x-www-form-urlencoded" id="delete-form" class="shrink-0">
+                  <input type="hidden" name="_action" value="delete" />
+                  <button type="button" id="delete-btn"
+                    class="inline-flex items-center gap-2 border-2 border-red-500 text-red-500 text-4 font-medium px-6 py-2.25 hover:bg-red-500 hover:text-white transition-colors cursor-pointer bg-transparent rounded">
+                    Supprimer
+                  </button>
+                </form>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ============================= -->
+        <!-- PANEL : AMIS (mobile only)  -->
+        <!-- ============================= -->
+        <div id="panel-amis" data-panel class={activeTab !== 'amis' ? 'hidden' : ''}>
+          <div class="px-4 pt-8 pb-16">
+
+            <div class="flex items-center gap-4 mb-8">
+              <h2 class="text-black m-0 shrink-0">Amis</h2>
+              <div class="flex-1 h-0.5 bg-neutral-300"></div>
+            </div>
+
+            <!-- Boutons actions -->
+            <div class="flex flex-col gap-3 mb-8">
+              <a href="/boutique" class="flex items-center justify-center border-2 border-neutral-800 text-neutral-800 text-4 font-medium h-12 hover:bg-neutral-800 hover:text-white transition-colors no-underline">
+                Boutique
+              </a>
+              <button id="btn-open-friends-mob"
+                class="flex items-center justify-center border-2 border-neutral-800 text-neutral-800 text-4 font-medium h-12 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer bg-transparent">
+                Ajouter des amis
+              </button>
+            </div>
+
+            <!-- Liste des amis -->
+            {amiesExpand.length > 0 ? (
+              <div class="flex flex-col gap-5">
+                {amiesExpand.map(ami => (
+                  <a href={`/profil/${ami.id}`} class="flex items-center gap-4 no-underline hover:opacity-80 transition-opacity">
+                    <div class="relative shrink-0" style="width:84px; height:84px;">
+                      <div class="absolute rounded-full overflow-hidden" style="width:56px; height:56px; top:50%; left:50%; transform:translate(-50%,-50%); z-index:1;">
+                        {ami.avatar
+                          ? <PbImage record={ami} recordImage={ami.avatar} alt={ami.pseudo} class="w-full h-full object-cover" />
+                          : <div class="w-full h-full bg-primary-600 flex items-center justify-center">
+                              <span class="text-white font-bold text-5">{(ami.pseudo || ami.prenom || '?')[0].toUpperCase()}</span>
+                            </div>
+                        }
+                      </div>
+                      {ami.decoUrl && (
+                        <div class="absolute inset-0 pointer-events-none" style="z-index:2;">
+                          <PbImage src={ami.decoUrl} alt="" class="w-full h-full object-contain" />
+                        </div>
+                      )}
+                    </div>
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-1.5">
+                        <p class="text-neutral-800 font-bold text-4 m-0 truncate">{ami.pseudo || ''}</p>
+                        {ami.abonnements === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={18} height={18} class="shrink-0" />}
+                        {ami.abonnements === 'Premium' && <Image src={badgePremium} alt="Premium" width={18} height={18} class="shrink-0" />}
+                      </div>
+                      <p class="text-neutral-500 text-3.5 font-medium m-0 truncate">{`${ami.prenom ?? ''} ${ami.nom ?? ''}`.trim()}</p>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p class="text-neutral-500 text-4 font-medium m-0">Aucun ami pour l'instant.</p>
+            )}
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </section>
+
+  <!-- Friend modal -->
+  <div id="friend-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:50; align-items:center; justify-content:center;">
+    <div style="background:#1e1e1e; width:min(520px,95vw); max-height:80vh; display:flex; flex-direction:column; border-radius:5px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:20px 28px; border-bottom:1px solid rgba(255,255,255,0.1);">
+        <h3 style="color:white; margin:0; font-size:25px; font-weight:500; letter-spacing:-1px;">Ajouter des amis</h3>
+        <button id="friend-modal-close" style="background:transparent; border:none; color:white; font-size:26px; line-height:1; cursor:pointer; opacity:0.6;">×</button>
+      </div>
+      <div style="padding:14px 28px; border-bottom:1px solid rgba(255,255,255,0.1);">
+        <div style="display:flex; align-items:center; gap:12px; background:#2c2c2c; border-radius:5px; padding:0 14px; height:42px;">
+          <Image src={searchIcon} alt="" width={14} height={14} class="opacity-40 shrink-0" />
+          <input id="friend-search" type="text" placeholder="Rechercher un utilisateur…" style="background:transparent; flex:1; font-size:14px; font-weight:500; outline:none; border:none; color:#f7f1ed;" class="placeholder-neutral-200/40" />
+        </div>
+      </div>
+      <div id="friend-modal-list" style="overflow-y:auto; flex:1; padding:20px 28px;"></div>
+    </div>
+  </div>
+
+  <script id="friend-data" type="application/json" set:html={JSON.stringify({ allUsers, amiesIds, userId, token, PB_URL })}></script>
+
+  <div id="auth-meta" data-token={token} data-user-id={userId} hidden></div>
+
+  <script is:inline define:vars={{ activeTab, PB_URL: 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr', token, userId, decoRecord, titreRecord, themeRecord }}>
+    // profil.js — onglets + mode édition
+    function moveIndicator(btn) {
+      var indicator = document.getElementById('tab-indicator');
+      var list      = document.getElementById('tab-list');
+      if (!indicator || !list) return;
+      var listRect = list.getBoundingClientRect();
+      var btnRect  = btn.getBoundingClientRect();
+      indicator.style.left  = (btnRect.left - listRect.left + list.scrollLeft) + 'px';
+      indicator.style.width = btnRect.width + 'px';
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('[data-panel]').forEach(function(p) { p.classList.add('hidden'); });
+      var panel = document.getElementById('panel-' + name);
+      if (panel) panel.classList.remove('hidden');
+      var btn = document.querySelector('.tab-btn[data-tab="' + name + '"]');
+      if (btn) moveIndicator(btn);
+      if (name !== 'profil') resetEdit();
+    }
+
+    function toggleEdit() {
+      var editBtn   = document.getElementById('edit-btn');
+      var cancelBtn = document.getElementById('cancel-btn');
+      if (!editBtn || !cancelBtn) return;
+      var isView = editBtn.style.display !== 'none';
+      if (isView) {
+        switchTab('profil');
+        document.querySelectorAll('.view-field').forEach(function(el) { el.classList.add('hidden'); });
+        document.querySelectorAll('.edit-field').forEach(function(el) { el.classList.remove('hidden'); });
+        editBtn.style.display   = 'none';
+        cancelBtn.style.display = '';
+      } else {
+        resetEdit();
+      }
+    }
+
+    function resetEdit() {
+      document.querySelectorAll('.view-field').forEach(function(el) { el.classList.remove('hidden'); });
+      document.querySelectorAll('.edit-field').forEach(function(el) { el.classList.add('hidden'); });
+      var editBtn   = document.getElementById('edit-btn');
+      var cancelBtn = document.getElementById('cancel-btn');
+      if (editBtn)   editBtn.style.display   = '';
+      if (cancelBtn) cancelBtn.style.display = 'none';
+    }
+
+    function confirmDelete() {
+      if (confirm('Supprimer définitivement votre compte ? Cette action est irréversible.')) {
+        var form = document.getElementById('delete-form');
+        if (form) form.submit();
+      }
+    }
+
+    document.querySelectorAll('[data-tab]').forEach(function(btn) {
+      btn.addEventListener('click', function() { switchTab(btn.dataset.tab); });
+    });
+
+    var initTab = (activeTab || 'profil');
+    var initBtn = document.querySelector('.tab-btn[data-tab="' + initTab + '"]');
+    if (initBtn) moveIndicator(initBtn);
+    var editBtnEl = document.getElementById('edit-btn');
+    if (editBtnEl) editBtnEl.addEventListener('click', toggleEdit);
+    var cancelBtnEl = document.getElementById('cancel-btn');
+    if (cancelBtnEl) cancelBtnEl.addEventListener('click', toggleEdit);
+    var deleteBtnEl = document.getElementById('delete-btn');
+    if (deleteBtnEl) deleteBtnEl.addEventListener('click', confirmDelete);
+
+    var avatarWrap = document.getElementById('profile-avatar-wrap');
+    if (avatarWrap) {
+      avatarWrap.addEventListener('click', function() {
+        var eb = document.getElementById('edit-btn');
+        if (eb && eb.style.display === 'none') {
+          var upload = document.getElementById('avatar-upload');
+          if (upload) upload.click();
+        }
+      });
+    }
+
+    // inventaire.js
+    (function () {
+      var equipped = {
+        decoration_avatar: decoRecord ? decoRecord.id : null,
+        titre: titreRecord ? titreRecord.id : null,
+        theme: themeRecord ? themeRecord.id : null,
+      };
+
+      var EQUIP_FIELD = { decoration_avatar: 'equiper_avatar_decoration', titre: 'equiper_titre', theme: 'equiper_theme' };
+
+      function showToast(msg, ok) {
+        var toast = document.getElementById('inv-toast');
+        if (!toast) return;
+        toast.textContent = msg;
+        toast.style.background = ok ? '#347645' : '#c0392b';
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateX(-50%) translateY(0)';
+        clearTimeout(toast._t);
+        toast._t = setTimeout(function () {
+          toast.style.opacity = '0';
+          toast.style.transform = 'translateX(-50%) translateY(20px)';
+        }, 2800);
+      }
+
+      function reload() {
+        var u = new URL(window.location.href);
+        u.searchParams.set('tab', 'inventaire');
+        window.location.href = u.toString();
+      }
+
+      async function equipItem(btn) {
+        var itemId   = btn.dataset.itemId;
+        var itemType = btn.dataset.itemType;
+        var field    = EQUIP_FIELD[itemType];
+        if (!field || !token) return;
+        btn.disabled = true;
+        btn.textContent = '...';
+        try {
+          var res = await fetch(PB_URL + '/api/collections/users/records/' + userId, {
+            method: 'PATCH',
+            headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [field]: itemId }),
+          });
+          if (!res.ok) throw new Error();
+          var oldId = equipped[itemType];
+          if (oldId && oldId !== itemId) updateCard(oldId, itemType, false);
+          equipped[itemType] = itemId;
+          showToast('Article équipé !', true);
+          setTimeout(reload, 800);
+        } catch (e) {
+          btn.disabled = false;
+          btn.textContent = 'Équiper';
+          showToast('Erreur, réessayez.', false);
+        }
+      }
+
+      async function unequipItem(btn) {
+        var itemId   = btn.dataset.itemId;
+        var itemType = btn.dataset.itemType;
+        var field    = EQUIP_FIELD[itemType];
+        if (!field || !token) return;
+        btn.disabled = true;
+        btn.textContent = '...';
+        try {
+          var res = await fetch(PB_URL + '/api/collections/users/records/' + userId, {
+            method: 'PATCH',
+            headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [field]: '' }),
+          });
+          if (!res.ok) throw new Error();
+          equipped[itemType] = null;
+          updateCard(itemId, itemType, false);
+          showToast('Article retiré.', true);
+          setTimeout(reload, 800);
+        } catch (e) {
+          btn.disabled = false;
+          btn.textContent = 'Déséquiper';
+          showToast('Erreur, réessayez.', false);
+        }
+      }
+
+      function updateCard(itemId, itemType, isEquipped) {
+        document.querySelectorAll('[data-inv-card="' + itemId + '"]').forEach(function (card) {
+          var badge         = card.querySelector('.inv-equipped-badge');
+          var equipBtn      = card.querySelector('.inv-equip-btn');
+          var equippedState = card.querySelector('.inv-equipped-state');
+          if (isEquipped) {
+            card.classList.add('ring-2', 'ring-primary-500');
+            if (badge)         badge.classList.remove('hidden');
+            if (equipBtn)      equipBtn.classList.add('hidden');
+            if (equippedState) equippedState.classList.remove('hidden');
+          } else {
+            card.classList.remove('ring-2', 'ring-primary-500');
+            if (badge)         badge.classList.add('hidden');
+            if (equipBtn)      equipBtn.classList.remove('hidden');
+            if (equippedState) equippedState.classList.add('hidden');
+          }
+        });
+      }
+
+      document.addEventListener('click', function (e) {
+        var equipBtn   = e.target && e.target.closest('.inv-equip-btn');
+        var unequipBtn = e.target && e.target.closest('.inv-unequip-btn');
+        if (equipBtn)   equipItem(equipBtn);
+        if (unequipBtn) unequipItem(unequipBtn);
+      });
+    })();
+  </script>
+
+  <script>
+    import '../../js/like.js';
+    import '../../js/amis.js';
+  </script>
+
+  <style is:global>
+    /* Quand un thème est équipé, les titres de section passent en blanc */
+    .theme-active h2,
+    .theme-active h3 {
+      color: white;
+    }
+    /* Les h3 à l'intérieur de cartes blanches restent noirs */
+    .theme-active .bg-white h2,
+    .theme-active .bg-white h3 {
+      color: rgb(0 0 0);
+    }
+    /* Les spans de compteur dans les séparateurs restent neutres */
+    .theme-active h3 > span.text-neutral-500 {
+      color: rgb(100 98 98);
+    }
+  </style>
+
+</Layout>

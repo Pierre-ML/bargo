@@ -1,0 +1,130 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { Image } from 'astro:assets';
+import { loginUser } from '../../backend/backend.js';
+import bgImg       from '../assets/img/fond_connextion_inscription.avif';
+import arrowRightLg from '../assets/icon/arrow_right_lg.svg';
+import '../styles/connexion.css';
+
+// Déjà connecté → profil (les deux cookies doivent exister, sinon on nettoie)
+const _token  = Astro.cookies.get('pb_token')?.value;
+const _userId = Astro.cookies.get('pb_user_id')?.value;
+if (_token && _userId) {
+  return Astro.redirect('/profil');
+}
+// Nettoyage d'un état incohérent (un cookie présent sans l'autre)
+if (_token  && !_userId) Astro.cookies.delete('pb_token',   { path: '/' });
+if (_userId && !_token)  Astro.cookies.delete('pb_user_id', { path: '/' });
+
+let error = '';
+if (Astro.url.searchParams.get('error') === 'oauth') {
+  error = 'Erreur lors de la connexion avec Google. Réessayez.';
+}
+
+if (Astro.request.method === 'POST') {
+  const body = await Astro.request.text();
+  const params = new URLSearchParams(body);
+  const email    = params.get('email') ?? '';
+  const password = params.get('password') ?? '';
+
+  const result = await loginUser(email, password);
+  if (result?.token) {
+    Astro.cookies.set('pb_token',   result.token,     { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 * 7, sameSite: 'lax' });
+    Astro.cookies.set('pb_user_id', result.record.id, { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 * 7, sameSite: 'lax' });
+    return Astro.redirect('/profil');
+  }
+  error = 'Email ou mot de passe incorrect.';
+}
+---
+
+<Layout title="Connexion — Bargo">
+  <section class="relative min-h-215 overflow-hidden">
+
+    <!-- Fond sombre (pleine largeur) -->
+    <div class="absolute inset-0 bg-neutral-800"></div>
+
+    <!-- Photo droite — desktop uniquement -->
+    <div class="hidden lg:block absolute top-0 bottom-0 right-0 overflow-hidden" style="left: max(813px, calc(50% + 93px));">
+      <Image src={bgImg} alt="" class="w-full h-full object-cover object-top" />
+    </div>
+
+    <!-- Wrapper centré (pleine largeur mobile, max-1440px centré desktop) -->
+    <div class="absolute top-0 left-0 h-full w-full lg:max-w-360 lg:left-1/2 lg:-translate-x-1/2 z-10">
+
+      <!-- Erreur serveur -->
+      {error && (
+        <p class="absolute top-23.75 left-5 lg:left-20 text-red-400 text-3.5 font-medium m-0 z-10">{error}</p>
+      )}
+
+      <!-- H2 -->
+      <h2 class="absolute top-15 lg:top-23.75 left-5 lg:left-19.75 text-white m-0 uppercase text-8 lg:text-12.5">
+        CONNECTEZ-VOUS
+      </h2>
+
+      <!-- Sous-titre -->
+      <p class="absolute top-30 lg:top-43 left-5 lg:left-20 text-3.5 font-medium leading-tight text-white m-0 w-[calc(100%-40px)] lg:w-136.75">
+        Accédez à votre espace BARGO et retrouvez vos barathons.
+      </p>
+
+      <form method="POST" enctype="application/x-www-form-urlencoded">
+
+        <!-- ─── Adresse E-mail ─── -->
+        <label class="absolute top-47.5 lg:top-63.5 left-5 lg:left-20 text-white text-4 font-medium leading-snug">Adresse E-mail</label>
+        <div class="absolute top-56.25 lg:top-73.5 left-5 lg:left-20 right-5 lg:right-auto bg-neutral-200 rounded-0.75 h-15.5 lg:w-156 flex items-center px-8">
+          <input type="email" name="email" placeholder="Mail" required
+            class="bg-transparent w-full text-3.5 font-medium text-neutral-500 placeholder-neutral-500 outline-none" />
+        </div>
+
+        <!-- ─── Mot de passe ─── -->
+        <label class="absolute top-78.75 lg:top-98 left-5 lg:left-20 text-white text-4 font-medium leading-snug">Mots de passe</label>
+        <div class="absolute top-87.5 lg:top-108 left-5 lg:left-20 right-5 lg:right-auto bg-neutral-200 rounded-0.75 h-15.5 lg:w-156 flex items-center px-8">
+          <input type="password" name="password" placeholder="Mots de passe" required
+            class="bg-transparent w-full text-3.5 font-medium text-neutral-500 placeholder-neutral-500 outline-none" />
+        </div>
+
+        <!-- ─── Mot de passe oublié ─── -->
+        <p class="absolute top-108 lg:top-128.5 left-5 lg:left-20 text-3.5 font-medium leading-tight text-neutral-300 m-0">
+          Mot de passe oublié ?
+        </p>
+
+        <!-- ─── Bouton SE CONNECTER ─── -->
+        <button type="submit" id="btn-connexion"
+          class="absolute top-122.5 lg:top-145 left-5 lg:left-[calc(25%+107px)] w-[calc(100%-40px)] lg:w-59.25 bg-primary-600 h-15 inline-flex items-center justify-center gap-4 text-white text-4 font-medium leading-snug hover:brightness-110 active:scale-[0.97] transition-all cursor-pointer border-0">
+          SE CONNECTER
+          <Image src={arrowRightLg} alt="" width={35} height={35} class="brightness-0 invert" />
+        </button>
+
+        <!-- ─── Séparateur OU ─── -->
+        <div class="absolute top-139 lg:top-163 left-5 lg:left-[calc(25%+107px)] w-[calc(100%-40px)] lg:w-59.25 flex items-center gap-3 pointer-events-none">
+          <div class="flex-1 h-px bg-white/20"></div>
+          <span class="text-white/40 text-3.5 font-medium">ou</span>
+          <div class="flex-1 h-px bg-white/20"></div>
+        </div>
+
+        <!-- ─── Bouton Google ─── -->
+        <button type="button" id="btn-google-connexion"
+          class="btn-google-oauth absolute top-146.5 lg:top-170 left-5 lg:left-[calc(25%+107px)] w-[calc(100%-40px)] lg:w-59.25 bg-white h-15 inline-flex items-center justify-center gap-3 text-neutral-800 text-4 font-medium hover:bg-neutral-100 active:scale-[0.97] transition-all cursor-pointer border-0 disabled:opacity-50">
+          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+          Continuer avec Google
+        </button>
+
+        <!-- ─── Lien inscription ─── -->
+        <p class="absolute top-167 lg:top-191 left-5 lg:left-[calc(25%+344px)] lg:-translate-x-full text-3.5 font-medium leading-tight text-white m-0">
+          Pas encore de compte ?&nbsp;<a href="/inscription" class="underline hover:opacity-70 transition-opacity">S'inscrire</a>
+        </p>
+
+      </form>
+    </div>
+
+  </section>
+
+  <script>
+    import '../js/oauth-google.js';
+  </script>
+
+</Layout>

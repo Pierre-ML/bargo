@@ -1,0 +1,138 @@
+---
+// @ts-nocheck
+import Layout from '../../layouts/Layout.astro';
+import { PB_URL } from '../../../backend/backend.js';
+import SessionPanel from '../../components/SessionPanel.astro';
+import SessionModals from '../../components/SessionModals.astro';
+
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+if (!token || !userId) return Astro.redirect('/connexion');
+
+const { id } = Astro.params;
+if (!id) return Astro.redirect('/session');
+
+// Fetch session with expanded relations
+const res = await fetch(
+  `${PB_URL}/api/collections/session_barathon/records/${id}?expand=id_bar,id_jeux,id_menbre,id_sam`,
+  { headers: { Authorization: `Bearer ${token}` } }
+);
+if (!res.ok) return Astro.redirect('/session');
+const session = await res.json();
+if (!session || session.code === 404) return Astro.redirect('/session');
+
+// Prepare expanded data
+const bars  = (session.expand?.id_bar  ?? []).map(b => ({
+  id: b.id, collectionName: b.collectionName,
+  nom: b.nom ?? '', adresse: b.adresse ?? '',
+  img: b.img?.[0] ?? null,
+  lat: b.localisation?.lat ?? null, lon: b.localisation?.lon ?? null,
+}));
+
+// id_jeux est Single — peut être un objet ou null
+const jeuxRaw = session.expand?.id_jeux;
+const jeux = jeuxRaw
+  ? [{ id: jeuxRaw.id, collectionName: jeuxRaw.collectionName, nom: jeuxRaw.nom ?? '', description: jeuxRaw.description ?? '', img: Array.isArray(jeuxRaw.img) ? (jeuxRaw.img[0] ?? null) : (jeuxRaw.img ?? null), type_du_jeux: jeuxRaw.type_du_jeux ?? '' }]
+  : [];
+
+const amis  = (session.expand?.id_menbre ?? []).map(u => ({
+  id: u.id, collectionName: u.collectionName,
+  pseudo: u.pseudo ?? '', prenom: u.prenom ?? '', nom: u.nom ?? '',
+  avatar: u.avatar ?? null,
+}));
+
+const samIds = (session.expand?.id_sam ?? []).map(u => u.id);
+
+// Amis de l'hôte pour la modale "Ajouter des amis"
+const hostRes  = await fetch(`${PB_URL}/api/collections/users/records/${userId}?expand=amies`, { headers: { Authorization: `Bearer ${token}` } });
+const hostData = hostRes.ok ? await hostRes.json() : {};
+const allAmies = (hostData.expand?.amies ?? []).map(u => ({
+  id: u.id, collectionName: u.collectionName,
+  pseudo: u.pseudo ?? '', prenom: u.prenom ?? '', nom: u.nom ?? '',
+  avatar: u.avatar ?? null,
+}));
+
+// All bars & jeux for "Ajouter" modal
+const barsRes  = await fetch(`${PB_URL}/api/collections/bar/records?perPage=200&sort=nom`);
+const barsData = await barsRes.json();
+const allBars  = (barsData.items ?? []).map(b => ({
+  id: b.id, collectionName: b.collectionName,
+  nom: b.nom ?? '', adresse: b.adresse ?? '',
+  img: b.img?.[0] ?? null,
+  lat: b.localisation?.lat ?? null, lon: b.localisation?.lon ?? null,
+}));
+
+const jeuxRes  = await fetch(`${PB_URL}/api/collections/jeux/records?perPage=200&sort=nom`);
+const jeuxData = await jeuxRes.json();
+const allJeux  = (jeuxData.items ?? []).map(j => ({
+  id: j.id, collectionName: j.collectionName,
+  nom: j.nom ?? '', description: j.description ?? '',
+  img: Array.isArray(j.img) ? (j.img[0] ?? null) : (j.img ?? null),
+  type_du_jeux: j.type_du_jeux ?? '',
+}));
+
+const isHote = session.id_hote === userId;
+
+const isSam     = (session.expand?.id_sam ?? []).some(u => u.id === userId);
+const barActuel = session.bar_actuel ?? 0;
+
+// Determine session state: pas_commencer | en_cours | fini
+const automatique = !!(session.automatique);
+let statut = session.etat_session ?? 'pas_commencer';
+
+// Auto-transition SSR si lancement automatique activé
+if (automatique && statut === 'pas_commencer' && session.date_heur_depart) {
+  try {
+    const dtDepart = new Date(session.date_heur_depart.replace(' ', 'T'));
+    if (!isNaN(dtDepart.getTime()) && new Date() >= dtDepart) {
+      await fetch(`${PB_URL}/api/collections/session_barathon/records/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ etat_session: 'en_cours' }),
+      });
+      statut = 'en_cours';
+    }
+  } catch(_) {}
+}
+if (automatique && statut === 'en_cours' && session.date_heur_arriver) {
+  try {
+    const dtArriver = new Date(session.date_heur_arriver.replace(' ', 'T'));
+    if (!isNaN(dtArriver.getTime()) && new Date() >= dtArriver) {
+      await fetch(`${PB_URL}/api/collections/session_barathon/records/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ etat_session: 'fini' }),
+      });
+      statut = 'fini';
+    }
+  } catch(_) {}
+}
+
+if (statut === 'fini') return Astro.redirect('/session');
+let isEnCours = statut === 'en_cours';
+
+const pageData = JSON.stringify({
+  session: { id: session.id, nom: session.nom, date: session.date_heur_depart?.split(' ')[0] ?? '', heure_debut: session.date_heur_depart?.split(' ')[1]?.substring(0, 5) ?? '', heure_fin: session.date_heur_arriver?.split(' ')[1]?.substring(0, 5) ?? '', description: session.description, automatique, date_heur_depart: session.date_heur_depart ?? null, date_heur_arriver: session.date_heur_arriver ?? null },
+  bars, jeux, amis, samIds,
+  allBars, allJeux, allAmies,
+  PB_URL, token, isHote, isSam, userId, isEnCours, barActuel,
+});
+---
+
+<Layout title={`${session.nom ?? 'Session'} — Bargo`}>
+
+<div class="flex flex-col lg:flex-row" style="min-height: calc(100vh - 92px);">
+  <div id="session-map" class="flex-1 h-70 lg:h-auto" style="background:#dfdfdf; position:relative; z-index:0;"></div>
+  <SessionPanel session={{ nom: session.nom, date: session.date_heur_depart?.split(' ')[0] ?? '', heure_debut: session.date_heur_depart?.split(' ')[1]?.substring(0, 5) ?? '' }} isHote={isHote} isEnCours={isEnCours} />
+</div>
+
+<SessionModals />
+
+<!-- JSON data -->
+<script id="page-data" type="application/json" set:html={pageData}></script>
+
+<script>
+import "../../js/session-detail.js";
+</script>
+
+</Layout>

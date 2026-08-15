@@ -1,0 +1,287 @@
+---
+// @ts-nocheck
+import Layout from '../../layouts/Layout.astro';
+
+const token  = Astro.cookies.get('pb_token')?.value ?? '';
+const userId = Astro.cookies.get('pb_user_id')?.value ?? '';
+if (!token || !userId) return Astro.redirect('/connexion');
+
+const PB_URL = 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr';
+
+const rawThemes = Astro.url.searchParams.get('themes') ?? '';
+const themes    = rawThemes.split(',').filter(Boolean);
+const time      = Math.max(5, Math.min(60, parseInt(Astro.url.searchParams.get('time') ?? '20')));
+const sessionId = Astro.url.searchParams.get('session') ?? '';
+const inSession = !!(sessionId && token && userId);
+
+if (themes.length === 0) {
+  return Astro.redirect('/jeux_questionaire');
+}
+
+const filterParts = themes.map(t => `theme="${t}"`).join('||');
+const filter      = encodeURIComponent(filterParts);
+const res         = await fetch(`${PB_URL}/api/collections/jeux_questionaire/records?perPage=100&sort=@random&filter=${filter}`);
+const data        = await res.json();
+const allQ        = data.items ?? [];
+const fetchError  = !res.ok ? `HTTP ${res.status} — ${data?.message ?? 'erreur inconnue'}` : null;
+
+// Shuffle + take 10
+for (let i = allQ.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [allQ[i], allQ[j]] = [allQ[j], allQ[i]];
+}
+
+const themeLabels = { cultrue_g: 'Culture générale', jeux_video: 'Jeux vidéo', histoire: 'Histoire' };
+function tLabel(t) { return themeLabels[t] ?? t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); }
+
+const questions = allQ.slice(0, 10).map(q => ({
+  q: q.question,
+  c: [q.choix_1, q.choix_2, q.choix_3, q.choix_4],
+  a: [q.reponse_1, q.reponse_2, q.reponse_3, q.reponse_4].findIndex(v => v === true),
+  t: tLabel(q.theme),
+}));
+---
+
+<Layout title="Quiz — Bargo" noFooter={true}>
+
+  <!-- Barre de progression en haut -->
+  <div class="fixed top-0 left-0 right-0 z-50 h-1 bg-[#333]">
+    <div id="quiz-progress" class="h-full bg-[#72C073] transition-[width] duration-300" style="width:0%"></div>
+  </div>
+
+  {questions.length === 0 ? (
+    <div class="min-h-screen bg-neutral-800 flex flex-col items-center justify-center px-4 text-center">
+      <p class="text-neutral-200 text-4 font-medium mb-6">Aucune question trouvée pour ce thème.</p>
+      {fetchError && <p class="text-red-400 text-3.5 font-medium mb-4 opacity-80">{fetchError}</p>}
+      <a href="/jeux_questionaire" class="bg-primary-600 text-white px-8 h-12 flex items-center text-4 font-medium no-underline hover:opacity-90 transition-opacity">
+        Retour
+      </a>
+    </div>
+  ) : (
+
+    <main class="min-h-screen bg-neutral-800 flex flex-col items-center justify-center px-4 py-16">
+
+      <!-- ===== PHASE JEU ===== -->
+      <div id="phase-playing" class="w-full max-w-2xl">
+
+        <!-- En-tête : compteur + timer texte -->
+        <div class="flex items-center justify-between mb-3">
+          <span id="q-counter" class="text-neutral-300 text-3.5 font-medium tracking-wide uppercase opacity-70">Question 1 / {questions.length}</span>
+          <div class="flex items-center gap-2">
+            <span id="timer-text" class="font-bold text-5 tabular-nums" style="color:#72C073">{time}</span>
+            <span class="text-neutral-300 text-3.5 opacity-50">sec</span>
+          </div>
+        </div>
+
+        <!-- Barre timer -->
+        <div class="w-full h-1 bg-zinc-800 rounded-full mb-8">
+          <div id="timer-bar" class="h-full rounded-full" style="width:100%;background:#72C073;transition:width 0.9s linear,background 0.5s"></div>
+        </div>
+
+        <!-- Carte question -->
+        <div class="bg-zinc-800 border border-neutral-700 rounded-1 px-6 py-7 mb-5">
+          <span id="q-theme-badge" class="inline-block text-primary-500 text-3 font-medium uppercase tracking-widest mb-3 opacity-80"></span>
+          <p id="q-text" class="m-0 text-white text-4.5 lg:text-5 font-medium leading-normal"></p>
+        </div>
+
+        <!-- Choix (2×2) -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+          {[0,1,2,3].map(i => (
+            <button
+              id={`choice-${i}`}
+              data-index={String(i)}
+              class="choice-btn min-h-14 px-5 py-3.5 bg-zinc-800 border border-zinc-700 text-white text-3.5 font-medium text-left rounded-0.5 hover:border-primary-500 hover:bg-[#2c3a2c] transition-all cursor-pointer flex items-center gap-4"
+            >
+              <span class="w-7 h-7 rounded-full border border-primary-500 text-primary-500 text-3 font-bold flex items-center justify-center shrink-0">{String.fromCharCode(65 + i)}</span>
+              <span class="choice-text leading-snug"></span>
+            </button>
+          ))}
+        </div>
+
+      </div>
+
+      <!-- ===== PHASE RÉSULTAT ===== -->
+      <div id="phase-result" class="hidden w-full max-w-lg">
+
+        <!-- Score card -->
+        <div class="bg-zinc-800 border border-neutral-700 rounded-1 p-8 lg:p-10 mb-6 text-center">
+
+          <!-- Score visuel -->
+          <div id="result-circle-section" class="flex items-center justify-center gap-6 mb-6">
+            <div class="w-28 h-28 rounded-full flex flex-col items-center justify-center shrink-0" style="background: conic-gradient(#72C073 0deg, #72C073 calc(var(--pct,0) * 360deg), #333 calc(var(--pct,0) * 360deg)); padding: 4px;">
+              <div class="w-full h-full rounded-full bg-zinc-800 flex flex-col items-center justify-center">
+                <span id="result-correct" class="text-white font-bold text-8 leading-none"></span>
+                <span class="text-neutral-300 text-3 font-medium opacity-60">/ {questions.length}</span>
+              </div>
+            </div>
+            <div class="text-left">
+              <h2 id="result-title" class="text-white m-0 mb-1 text-5.5">Résultat</h2>
+              <p id="result-score" class="text-primary-500 text-7 font-bold m-0"></p>
+              <p id="result-mult" class="text-neutral-300 text-3 font-medium opacity-50 m-0 mt-1"></p>
+            </div>
+          </div>
+
+          <!-- Barre de score -->
+          <div class="w-full h-2 bg-[#333] rounded-full overflow-hidden">
+            <div id="result-bar" class="h-full bg-[#72C073] rounded-full transition-[width] duration-700" style="width:0%"></div>
+          </div>
+
+        </div>
+
+        <!-- Boutons -->
+        <div class="flex flex-col gap-3">
+          <a href={`/jeux_questionaire/jouer?themes=${encodeURIComponent(rawThemes)}&time=${time}`}
+            class="h-12 bg-primary-600 text-white text-4 font-medium flex items-center justify-center no-underline hover:opacity-90 transition-opacity rounded-0.5">
+            Rejouer
+          </a>
+          <div class="flex flex-col lg:flex-row gap-3">
+            <a href="/jeux_questionaire"
+              class="lg:flex-1 h-12 bg-zinc-800 border border-zinc-700 text-white text-4 font-medium flex items-center justify-center no-underline hover:opacity-80 transition-opacity rounded-0.5">
+              Changer les paramètres
+            </a>
+            <a href="/jeux"
+              class="lg:flex-1 h-12 bg-transparent border border-zinc-700 text-neutral-300 text-4 font-medium flex items-center justify-center no-underline hover:opacity-80 transition-opacity rounded-0.5">
+              Retour aux jeux
+            </a>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  )}
+
+  <script is:inline define:vars={{ quizData: { questions, time, pbUrl: PB_URL, token, userId, inSession } }}>
+    var d = quizData;
+    if (!d || !d.questions || d.questions.length === 0) { /* no-op */ } else {
+
+    var questions    = d.questions;
+    var time         = d.time;
+    var quizPbUrl    = d.pbUrl;
+    var quizToken    = d.token;
+    var quizUserId   = d.userId;
+    var quizInSession = d.inSession;
+
+    var cur          = 0;
+    var score        = 0;
+    var correctCount = 0;
+    var answered     = false;
+    var timerRef     = null;
+    var timeLeft     = time;
+    var multiplier   = time <= 10 ? 3 : time <= 20 ? 2 : time <= 30 ? 1.5 : 1;
+    var ptsPerQ      = Math.round(10 * multiplier);
+
+    function $(id) { return document.getElementById(id); }
+
+    function setTimerColor(pct) {
+      var color = pct > 0.5 ? '#72C073' : pct > 0.25 ? '#f59e0b' : '#ef4444';
+      $('timer-text').style.color     = color;
+      $('timer-bar').style.background = color;
+    }
+
+    function load() {
+      answered = false;
+      timeLeft = time;
+      var q = questions[cur];
+      $('q-counter').textContent     = 'Question ' + (cur + 1) + ' / ' + questions.length;
+      $('q-theme-badge').textContent = q.t;
+      $('q-text').textContent        = q.q;
+      $('quiz-progress').style.width = ((cur / questions.length) * 100) + '%';
+      document.querySelectorAll('.choice-btn').forEach(function (btn, i) {
+        btn.querySelector('.choice-text').textContent = q.c[i] || '';
+        btn.style.background  = '';
+        btn.style.borderColor = '';
+        btn.style.opacity     = '';
+        btn.disabled          = false;
+        btn.style.display     = q.c[i] ? '' : 'none';
+      });
+      $('timer-text').textContent     = String(time);
+      $('timer-bar').style.transition = 'none';
+      $('timer-bar').style.width      = '100%';
+      setTimerColor(1);
+      $('timer-bar').getBoundingClientRect();
+      $('timer-bar').style.transition = 'width 0.9s linear, background 0.5s';
+      clearInterval(timerRef);
+      timerRef = setInterval(tick, 1000);
+    }
+
+    function tick() {
+      timeLeft--;
+      $('timer-text').textContent = String(Math.max(0, timeLeft));
+      var pct = timeLeft / time;
+      setTimerColor(Math.max(0, pct));
+      $('timer-bar').style.width = (Math.max(0, pct) * 100) + '%';
+      if (timeLeft <= 0) { clearInterval(timerRef); reveal(-1); }
+    }
+
+    function reveal(selected) {
+      if (answered) return;
+      answered = true;
+      clearInterval(timerRef);
+      var correct = questions[cur].a;
+      if (selected === correct && selected !== -1) { score += ptsPerQ; correctCount++; }
+      document.querySelectorAll('.choice-btn').forEach(function (btn, i) {
+        btn.disabled = true;
+        if (i === correct) {
+          btn.style.background  = '#14532d';
+          btn.style.borderColor = '#72C073';
+        } else if (i === selected) {
+          btn.style.background  = '#7f1d1d';
+          btn.style.borderColor = '#ef4444';
+        } else {
+          btn.style.opacity = '0.4';
+        }
+      });
+      setTimeout(function () {
+        cur++;
+        if (cur < questions.length) { load(); } else { showResult(); }
+      }, 2000);
+    }
+
+    function showResult() {
+      $('phase-playing').classList.add('hidden');
+      $('phase-result').classList.remove('hidden');
+      $('quiz-progress').style.width  = '100%';
+      var pct = correctCount / questions.length;
+      $('result-title').textContent = pct >= 0.8 ? 'Excellent !' : pct >= 0.5 ? 'Bien joué !' : 'Pas mal !';
+      var circleSection = $('result-circle-section');
+      if (quizToken && quizUserId) {
+        $('result-correct').textContent = String(correctCount);
+        $('result-score').textContent   = score + ' pts';
+        $('result-mult').textContent    = 'x' + multiplier + ' — ' + ptsPerQ + ' pts par bonne réponse';
+        if (circleSection) circleSection.style.display = '';
+      } else {
+        if (circleSection) circleSection.style.display = 'none';
+      }
+      setTimeout(function () {
+        var bar = $('result-bar');
+        if (bar) bar.style.width = (pct * 100) + '%';
+      }, 100);
+      if (quizInSession && score > 0) { savePoints(score); }
+    }
+
+    function savePoints(pts) {
+      fetch(quizPbUrl + '/api/collections/users/records/' + quizUserId, {
+        headers: { Authorization: 'Bearer ' + quizToken }
+      })
+      .then(function (r) { return r.json(); })
+      .then(function (u) {
+        var current = u.points ?? 0;
+        return fetch(quizPbUrl + '/api/collections/users/records/' + quizUserId, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + quizToken },
+          body:    JSON.stringify({ points: current + pts }),
+        });
+      })
+      .catch(function () {});
+    }
+
+    document.querySelectorAll('.choice-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { reveal(parseInt(this.dataset.index)); });
+    });
+
+    load();
+    }
+  </script>
+
+</Layout>

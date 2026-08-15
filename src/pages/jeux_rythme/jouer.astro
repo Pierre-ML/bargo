@@ -1,0 +1,165 @@
+---
+// @ts-nocheck
+import Layout from '../../layouts/Layout.astro';
+import { PB_URL } from '../../../backend/backend.js';
+
+const token  = Astro.cookies.get('pb_token')?.value ?? '';
+const userId = Astro.cookies.get('pb_user_id')?.value ?? '';
+if (!token || !userId) return Astro.redirect('/connexion');
+
+const sessionId  = Astro.url.searchParams.get('session') ?? '';
+const inSession  = !!(sessionId && token && userId);
+const difficulty = Astro.url.searchParams.get('difficulty') ?? 'facile';
+
+const TOTAL_TIME = 40; // secondes
+
+const configs = {
+  facile:    { speed: 180, spawnMs: 2200, basePts: 80  },
+  moyen:     { speed: 300, spawnMs: 1400, basePts: 120 },
+  difficile: { speed: 450, spawnMs: 750,  basePts: 180 },
+};
+const labels = { facile: 'Facile', moyen: 'Moyen', difficile: 'Difficile' };
+
+const cfg = configs[difficulty] ?? configs.facile;
+---
+
+<Layout title="Rythme — Bargo" noFooter={true}>
+
+  <main class="h-screen bg-neutral-800 flex flex-col overflow-hidden select-none touch-none">
+
+    <!-- Barre timer -->
+    <div class="w-full h-1.5 bg-zinc-700 shrink-0">
+      <div id="timer-bar" class="h-full" style="width:100%; background:#72C073;"></div>
+    </div>
+
+    <!-- Top bar -->
+    <div class="flex items-center justify-between px-4 lg:px-10 py-2 lg:py-3 bg-zinc-800 border-b border-white/8 shrink-0">
+
+      <!-- Combo -->
+      <div class="flex flex-col">
+        <span class="text-neutral-400 text-2.75 font-medium uppercase tracking-widest leading-none mb-0.5">Combo</span>
+        <div class="flex items-baseline gap-1.5">
+          <span id="combo-count" class="text-white font-bold text-5 tabular-nums leading-none">0</span>
+          <span id="mult-badge" class="hidden px-1.5 py-0.5 bg-primary-900 text-primary-500 text-2.5 font-bold rounded-full uppercase tracking-widest">×1</span>
+        </div>
+      </div>
+
+      <!-- Timer + difficulté -->
+      <div class="flex flex-col items-center">
+        <span id="timer-text" class="font-bold text-5 tabular-nums leading-none" style="color:#72C073">{TOTAL_TIME}s</span>
+        <span class="text-neutral-500 text-2.75 font-medium uppercase tracking-widest mt-0.5">{labels[difficulty]}</span>
+      </div>
+
+      <!-- Score -->
+      <div class="flex flex-col items-end">
+        <span class="text-neutral-400 text-2.75 font-medium uppercase tracking-widest leading-none mb-0.5">Score</span>
+        <span id="score-count" class="text-white font-bold text-5 tabular-nums leading-none">0</span>
+      </div>
+
+    </div>
+
+    <!-- Zone de jeu -->
+    <div id="game-area" class="flex-1 relative overflow-hidden">
+
+      <!-- Séparateurs de couloirs -->
+      <div class="absolute inset-0 flex pointer-events-none z-0">
+        <div class="flex-1 border-r border-white/5"></div>
+        <div class="flex-1"></div>
+      </div>
+
+      <!-- Zone de frappe (dégradé) -->
+      <div id="hit-zone-glow" class="absolute left-0 right-0 pointer-events-none z-0"
+        style="bottom:80px; height:90px; background: linear-gradient(to top, rgba(114,192,115,0.09), transparent);">
+      </div>
+
+      <!-- Ligne de frappe -->
+      <div class="absolute left-0 right-0 pointer-events-none z-1"
+        style="bottom:calc(80px + 28px); height:2px; background:rgba(114,192,115,0.4);">
+      </div>
+
+      <!-- Compte à rebours -->
+      <div id="countdown"
+        class="absolute inset-0 flex items-center justify-center z-30 font-black text-white pointer-events-none"
+        style="font-size: clamp(4rem, 15vw, 8rem);">
+        3
+      </div>
+
+      <!-- Boutons de couloir (zone de frappe) -->
+      <div class="absolute bottom-0 left-0 right-0 h-20 flex z-10">
+        {[0, 1].map(i => (
+          <button
+            class="lane-btn flex-1 h-full border-r border-neutral-600 last:border-r-0 bg-zinc-800 text-neutral-600 font-black text-4 lg:text-5 uppercase tracking-widest transition-colors duration-75"
+            data-lane={String(i)}
+          >
+            {['A', 'Z'][i]}
+          </button>
+        ))}
+      </div>
+
+    </div>
+
+    <!-- Overlay résultat -->
+    <div id="result-overlay" class="hidden fixed inset-0 bg-neutral-800/95 z-50">
+      <div class="flex items-center justify-center w-full h-full px-4">
+        <div class="w-full max-w-lg">
+
+          <div class="bg-zinc-800 border border-neutral-700 rounded-1 p-8 lg:p-10 mb-6">
+            <h2 class="text-white m-0 mb-1 text-5.5 text-center">Partie terminée !</h2>
+            <p id="result-score" class="text-primary-500 text-8 font-bold m-0 text-center"></p>
+            <p id="result-accuracy" class="text-neutral-300 text-3.5 font-medium opacity-60 m-0 mt-1 text-center mb-6"></p>
+
+            <div class="flex flex-col gap-2 border-t border-neutral-700 pt-4">
+              {[
+                { id: 'result-hits',      label: 'Frappes réussies' },
+                { id: 'result-misses',    label: 'Blocs ratés'      },
+                { id: 'result-max-combo', label: 'Meilleur combo'   },
+              ].map(row => (
+                <div class="flex items-center justify-between gap-4">
+                  <p class="m-0 text-neutral-200 text-3.5 font-medium">{row.label}</p>
+                  <span id={row.id} class="text-4 font-bold text-white tabular-nums"></span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-3">
+            <a id="btn-rejouer" href="#"
+              class="h-12 bg-primary-600 text-white text-4 font-medium flex items-center justify-center no-underline hover:opacity-90 transition-opacity rounded-0.5">
+              Rejouer
+            </a>
+            <div class="flex flex-col lg:flex-row gap-3">
+              <a id="btn-params" href="#"
+                class="lg:flex-1 h-12 bg-zinc-800 border border-zinc-700 text-white text-4 font-medium flex items-center justify-center no-underline hover:opacity-80 transition-opacity rounded-0.5">
+                Changer la difficulté
+              </a>
+              <a href="/jeux"
+                class="lg:flex-1 h-12 bg-transparent border border-zinc-700 text-neutral-300 text-4 font-medium flex items-center justify-center no-underline hover:opacity-80 transition-opacity rounded-0.5">
+                Retour aux jeux
+              </a>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <div id="rythme-meta" hidden
+    data-difficulty={difficulty}
+    data-speed={String(cfg.speed)}
+    data-spawn-ms={String(cfg.spawnMs)}
+    data-base-pts={String(cfg.basePts)}
+    data-total-time={String(TOTAL_TIME)}
+    data-session-id={sessionId}
+    data-pb-url={PB_URL}
+    data-token={token}
+    data-user-id={userId}
+    data-in-session={String(inSession)}
+  ></div>
+
+  <script>
+    import '../../js/rythme-game.js';
+  </script>
+
+</Layout>

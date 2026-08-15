@@ -1,0 +1,367 @@
+---
+// @ts-nocheck
+import Layout from '../layouts/Layout.astro';
+import { Image } from 'astro:assets';
+import bgImg      from '../assets/img/fond_connextion_inscription.avif';
+import checkIcon   from '../assets/icon/check.svg';
+import warningIcon   from '../assets/icon/warning.svg';
+import arrowLeftIcon   from '../assets/icon/arrow_left_lg.svg';
+import creditCardIcon  from '../assets/icon/credit_card.svg';
+import lockIcon        from '../assets/icon/lock.svg';
+import { PB_URL } from '../../backend/backend.js';
+
+const planId = Astro.url.searchParams.get('plan') ?? 'vip';
+const token  = Astro.cookies.get('pb_token')?.value ?? null;
+const userId = Astro.cookies.get('pb_user_id')?.value ?? null;
+
+// Correspondance plan → valeur PocketBase
+const planPbValue = { vip: 'VIP', premium: 'Premium' };
+
+const plans = {
+  vip: {
+    nom: 'VIP',
+    prix: '4,99',
+    couleur: '#347645',
+    avantages: [
+      '5 sessions barathon maximum',
+      'Points x2 sur chaque session',
+      'Badge VIP sur votre profil',
+      'Accès prioritaire aux nouveaux bars',
+    ],
+  },
+  premium: {
+    nom: 'Premium',
+    prix: '9,99',
+    couleur: '#094736',
+    avantages: [
+      'Sessions barathon illimitées',
+      'Points x5 sur chaque session',
+      'Badge Premium exclusif',
+      'Accès anticipé aux nouveautés',
+    ],
+  },
+};
+
+const plan = plans[planId] ?? plans.vip;
+---
+
+<Layout title={`Paiement — ${plan.nom} — Bargo`}>
+
+  <!-- ===== POPUP DÉMONSTRATIF ===== -->
+  <div id="demo-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px;">
+    <div style="background:#1e1e1e;border-radius:6px;max-width:460px;width:100%;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.6);">
+      <div style="background:#f59e0b;padding:22px 28px;display:flex;align-items:center;gap:12px;">
+        <Image src={warningIcon} alt="" width={22} height={22} class="brightness-0 invert" />
+        <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:white;margin:0;">Page de démonstration</p>
+      </div>
+      <div style="padding:28px;">
+        <p style="color:white;font-size:18px;font-weight:600;margin:0 0 10px;letter-spacing:-0.3px;">Simulation uniquement</p>
+        <p style="color:rgba(247,241,237,0.65);font-size:14px;font-weight:500;line-height:1.65;margin:0 0 22px;">
+          Cette page existe à titre démonstratif pour illustrer l'expérience d'achat BARGO.
+          <strong style="color:#f7f1ed;">Aucune donnée bancaire ne sera collectée ni traitée.</strong>
+        </p>
+        <button id="demo-close"
+          style="width:100%;height:50px;background:#347645;color:white;font-size:15px;font-weight:500;border:none;border-radius:4px;cursor:pointer;letter-spacing:0.2px;">
+          J'ai compris, continuer
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SUCCESS OVERLAY ===== -->
+  <div id="success-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:200;align-items:center;justify-content:center;padding:16px;">
+    <div style="background:#1e1e1e;border-radius:6px;max-width:440px;width:100%;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.6);text-align:center;padding:48px 36px;">
+      <div style="width:68px;height:68px;background:#347645;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">
+        <Image src={checkIcon} alt="" width={32} height={32} class="brightness-0 invert" />
+      </div>
+      <p style="color:#72c073;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin:0 0 8px;">Paiement simulé</p>
+      <p style="color:white;font-size:22px;font-weight:600;margin:0 0 12px;letter-spacing:-0.5px;">Abonnement {plan.nom} activé !</p>
+      <p style="color:rgba(247,241,237,0.55);font-size:14px;font-weight:500;line-height:1.65;margin:0 0 28px;">
+        Dans un vrai contexte, votre abonnement serait maintenant actif.<br/>
+        Ceci est une démonstration — aucun paiement n'a été effectué.
+      </p>
+      <a href="/" style="display:flex;align-items:center;justify-content:center;height:50px;background:#347645;color:white;font-size:15px;font-weight:500;text-decoration:none;border-radius:4px;">
+        Retour à l'accueil
+      </a>
+    </div>
+  </div>
+
+  <!-- ===== MOBILE ===== -->
+  <section class="block lg:hidden bg-neutral-800 px-5 py-10 min-h-screen">
+
+    <a href="/abonnement" class="inline-flex items-center gap-2 text-neutral-300 text-3.5 font-medium no-underline hover:opacity-70 transition-opacity mb-8">
+      <Image src={arrowLeftIcon} alt="" width={16} height={16} style="filter:invert(85%) sepia(5%) saturate(200%) hue-rotate(314deg) brightness(110%) contrast(85%)" />
+      Retour
+    </a>
+
+    <!-- Récap plan -->
+    <div class="rounded-0.75 overflow-hidden mb-8">
+      <div class="px-5 py-4" style={`background:${plan.couleur};`}>
+        <p class="text-[rgba(255,255,255,0.6)] text-3 font-bold uppercase tracking-widest m-0 mb-0.5">Abonnement</p>
+        <div class="flex items-baseline gap-2">
+          <span class="text-white font-bold" style="font-size:28px;font-family:Manrope,sans-serif;">{plan.nom}</span>
+          <span class="text-white font-bold text-5">{plan.prix}€</span>
+          <span class="text-[rgba(255,255,255,0.55)] text-3.5 font-medium">/ mois</span>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="text-white m-0 mb-2 uppercase text-8">Paiement</h2>
+    <p class="text-3.5 font-medium leading-tight text-neutral-300 m-0 mb-6">Finalisez votre abonnement en toute sécurité.</p>
+
+    <form id="payment-form-mobile" class="flex flex-col gap-5" novalidate>
+
+      <div class="flex gap-3">
+        <div class="flex-1 flex flex-col gap-1">
+          <label class="text-white text-3.5 font-medium">Prénom</label>
+          <div class="bg-neutral-200 rounded-0.75 h-13 flex items-center px-4">
+            <input type="text" placeholder="Jean" class="bg-transparent w-full text-3.5 font-medium text-neutral-500 placeholder-neutral-500 outline-none" />
+          </div>
+        </div>
+        <div class="flex-1 flex flex-col gap-1">
+          <label class="text-white text-3.5 font-medium">Nom</label>
+          <div class="bg-neutral-200 rounded-0.75 h-13 flex items-center px-4">
+            <input type="text" placeholder="Dupont" class="bg-transparent w-full text-3.5 font-medium text-neutral-500 placeholder-neutral-500 outline-none" />
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-1">
+        <label class="text-white text-3.5 font-medium">Adresse e-mail</label>
+        <div class="bg-neutral-200 rounded-0.75 h-13 flex items-center px-4">
+          <input type="email" placeholder="jean.dupont@email.com" class="bg-transparent w-full text-3.5 font-medium text-neutral-500 placeholder-neutral-500 outline-none" />
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-1">
+        <label class="text-white text-3.5 font-medium">Numéro de carte</label>
+        <div class="bg-neutral-200 rounded-0.75 h-13 flex items-center px-4 gap-3">
+          <input id="card-number-m" type="text" placeholder="1234  5678  9012  3456" maxlength="19" class="bg-transparent flex-1 text-3.5 font-medium text-neutral-500 placeholder-neutral-500 outline-none tracking-widest" />
+          <Image src={creditCardIcon} alt="" width={26} height={18} class="shrink-0" />
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <div class="flex-1 flex flex-col gap-1">
+          <label class="text-white text-3.5 font-medium">Expiration</label>
+          <div class="bg-neutral-200 rounded-0.75 h-13 flex items-center px-4">
+            <input id="card-expiry-m" type="text" placeholder="MM / AA" maxlength="7" class="bg-transparent w-full text-3.5 font-medium text-neutral-500 placeholder-neutral-500 outline-none" />
+          </div>
+        </div>
+        <div class="flex-1 flex flex-col gap-1">
+          <label class="text-white text-3.5 font-medium">CVV</label>
+          <div class="bg-neutral-200 rounded-0.75 h-13 flex items-center px-4">
+            <input id="card-cvv-m" type="text" placeholder="•••" maxlength="3" class="bg-transparent w-full text-3.5 font-medium text-neutral-500 placeholder-neutral-500 outline-none" />
+          </div>
+        </div>
+      </div>
+
+      <label class="flex items-center gap-4 cursor-pointer mt-1">
+        <div class="relative w-6.25 h-6.25 shrink-0">
+          <input type="checkbox" class="absolute inset-0 opacity-0 w-full h-full cursor-pointer peer" />
+          <div class="absolute inset-0 border-2 border-white shadow-md peer-checked:bg-primary-600 peer-checked:border-primary-600 transition-colors"></div>
+          <Image src={checkIcon} alt="" width={16} height={16} class="absolute inset-0 hidden peer-checked:block w-full h-full p-0.5 brightness-0 invert" />
+        </div>
+        <span class="text-white text-3.5 font-medium leading-snug">J'accepte les <a href="/mention_legal" class="underline hover:opacity-70">conditions d'utilisation</a></span>
+      </label>
+
+      <button type="submit" class="mt-2 h-13 w-full flex items-center justify-center gap-2 text-white text-4 font-medium hover:opacity-90 transition-opacity cursor-pointer border-0" style={`background:${plan.couleur};`}>
+        <Image src={lockIcon} alt="" width={16} height={16} class="brightness-0 invert" />
+        Payer {plan.prix}€ / mois
+      </button>
+
+      <!-- SSL badge -->
+      <div class="flex items-center justify-center gap-1.5 mt-3">
+        <Image src={lockIcon} alt="" width={13} height={13} style="filter:invert(64%) sepia(54%) saturate(429%) hue-rotate(73deg) brightness(94%) contrast(88%)" />
+        <span class="text-primary-500 text-3 font-bold">Paiement SSL sécurisé</span>
+      </div>
+
+    </form>
+  </section>
+
+  <!-- ===== DESKTOP ===== -->
+  <section class="hidden lg:block relative overflow-hidden" style="min-height: calc(100vh - 92px);">
+
+    <!-- Fond sombre gauche -->
+    <div class="absolute inset-y-0 left-0 bg-neutral-800" style="width:813px;"></div>
+
+    <!-- Photo droite -->
+    <div class="absolute inset-y-0 right-0 overflow-hidden" style="left:813px;">
+      <Image src={bgImg} alt="" class="w-full h-full object-cover object-top" />
+      <!-- Overlay coloré plan -->
+      <div class="absolute inset-0 opacity-80" style={`background:${plan.couleur};`}></div>
+      <!-- Contenu plan par-dessus -->
+      <div class="absolute inset-0 flex flex-col justify-center px-16">
+        <p class="text-[rgba(255,255,255,0.7)] text-3 font-bold uppercase tracking-[3px] m-0 mb-3">Abonnement</p>
+        <h2 class="text-white m-0 mb-2 uppercase">{plan.nom}</h2>
+        <div class="flex items-baseline gap-2 mb-8">
+          <span class="text-white font-bold leading-none" style="font-size:56px;font-family:Manrope,sans-serif;">{plan.prix}€</span>
+          <span class="text-[rgba(255,255,255,0.6)] text-4 font-medium">/ mois</span>
+        </div>
+        <div class="w-16 h-0.5 bg-white opacity-30 mb-8"></div>
+        <ul class="list-none m-0 p-0 flex flex-col gap-4">
+          {plan.avantages.map(item => (
+            <li class="flex items-center gap-3">
+              <div class="shrink-0 w-4.5 h-4.5 rounded-full flex items-center justify-center" style="background:rgba(255,255,255,0.25);">
+                <Image src={checkIcon} alt="" width={11} height={11} class="brightness-0 invert" />
+              </div>
+              <span class="text-white text-4 font-medium">{item}</span>
+            </li>
+          ))}
+        </ul>
+        <div class="mt-10 pt-8 border-t border-white/20">
+          <div class="flex items-center justify-between">
+            <span class="text-[rgba(255,255,255,0.6)] text-3.5 font-medium">Total aujourd'hui</span>
+            <span class="text-white text-6 font-bold">{plan.prix}€</span>
+          </div>
+          <p class="text-[rgba(255,255,255,0.45)] text-3 font-medium m-0 mt-2">Renouvelé automatiquement. Résiliable à tout moment.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Retour -->
+    <a href="/abonnement" class="absolute top-10 left-20 inline-flex items-center gap-2 text-neutral-300 text-3.5 font-medium no-underline hover:opacity-70 transition-opacity z-10">
+      <Image src={arrowLeftIcon} alt="" width={16} height={16} style="filter:invert(85%) sepia(5%) saturate(200%) hue-rotate(314deg) brightness(110%) contrast(85%)" />
+      Retour aux abonnements
+    </a>
+
+    <!-- Titre -->
+    <h2 class="absolute text-white m-0 uppercase" style="top:96px;left:80px;">
+      Paiement
+    </h2>
+    <p class="absolute text-3.5 font-medium leading-tight text-neutral-300 m-0" style="top:172px;left:80px;">
+      Finalisez votre abonnement en toute sécurité.
+    </p>
+
+    <form id="payment-form" novalidate>
+
+      <!-- Prénom + Nom -->
+      <label class="absolute text-white text-4 font-medium leading-snug" style="top:214px;left:80px;">Prénom</label>
+      <div class="absolute bg-neutral-200 rounded-0.75 h-15.5 w-74 flex items-center px-8" style="top:254px;left:80px;">
+        <input type="text" placeholder="Jean"
+          class="bg-transparent w-full text-3.5 font-medium text-neutral-500 placeholder-neutral-500 outline-none" />
+      </div>
+
+      <label class="absolute text-white text-4 font-medium leading-snug" style="top:214px;left:calc(80px + 296px + 16px);">Nom</label>
+      <div class="absolute bg-neutral-200 rounded-0.75 h-15.5 w-74 flex items-center px-8" style="top:254px;left:calc(80px + 296px + 16px);">
+        <input type="text" placeholder="Dupont"
+          class="bg-transparent w-full text-3.5 font-medium text-neutral-500 placeholder-neutral-500 outline-none" />
+      </div>
+
+      <!-- Email -->
+      <label class="absolute text-white text-4 font-medium leading-snug" style="top:334px;left:80px;">Adresse e-mail</label>
+      <div class="absolute bg-neutral-200 rounded-0.75 h-15.5 flex items-center px-8" style="top:374px;left:80px;width:624px;">
+        <input type="email" placeholder="jean.dupont@email.com"
+          class="bg-transparent w-full text-3.5 font-medium text-neutral-500 placeholder-neutral-500 outline-none" />
+      </div>
+
+      <!-- Numéro de carte -->
+      <label class="absolute text-white text-4 font-medium leading-snug" style="top:454px;left:80px;">Numéro de carte</label>
+      <div class="absolute bg-neutral-200 rounded-0.75 h-15.5 flex items-center px-8 gap-4" style="top:494px;left:80px;width:624px;">
+        <input id="card-number" type="text" placeholder="1234  5678  9012  3456" maxlength="19"
+          class="bg-transparent flex-1 text-3.5 font-medium text-neutral-500 placeholder-neutral-500 outline-none tracking-widest" />
+        <Image src={creditCardIcon} alt="" width={32} height={22} class="shrink-0 brightness-0" />
+      </div>
+
+      <!-- Expiration + CVV -->
+      <label class="absolute text-white text-4 font-medium leading-snug" style="top:574px;left:80px;">Date d'expiration</label>
+      <div class="absolute bg-neutral-200 rounded-0.75 h-15.5 w-74 flex items-center px-8" style="top:614px;left:80px;">
+        <input id="card-expiry" type="text" placeholder="MM / AA" maxlength="7"
+          class="bg-transparent w-full text-3.5 font-medium text-neutral-500 placeholder-neutral-500 outline-none" />
+      </div>
+
+      <label class="absolute text-white text-4 font-medium leading-snug" style="top:574px;left:calc(80px + 296px + 16px);">CVV
+        <span class="text-neutral-400 text-3 font-medium ml-1">(3 chiffres)</span>
+      </label>
+      <div class="absolute bg-neutral-200 rounded-0.75 h-15.5 w-74 flex items-center px-8" style="top:614px;left:calc(80px + 296px + 16px);">
+        <input id="card-cvv" type="text" placeholder="•••" maxlength="3"
+          class="bg-transparent w-full text-3.5 font-medium text-neutral-500 placeholder-neutral-500 outline-none" />
+      </div>
+
+      <!-- Checkbox -->
+      <label class="absolute flex items-center gap-5.5 cursor-pointer" style="top:710px;left:80px;">
+        <div class="relative w-6.25 h-6.25 shrink-0">
+          <input type="checkbox" class="absolute inset-0 opacity-0 w-full h-full cursor-pointer peer" />
+          <div class="absolute inset-0 border-2 border-white shadow-md peer-checked:bg-primary-600 peer-checked:border-primary-600 transition-colors"></div>
+          <Image src={checkIcon} alt="" width={16} height={16} class="absolute inset-0 hidden peer-checked:block w-full h-full p-0.5 brightness-0 invert" />
+        </div>
+        <span class="text-white text-4 font-medium leading-snug">J'accepte les <a href="/mention_legal" class="underline hover:opacity-70 transition-opacity">conditions d'utilisation</a></span>
+      </label>
+
+      <!-- Bouton payer -->
+      <button type="submit" id="btn-pay"
+        class="absolute h-15 w-74 flex items-center justify-center gap-3 text-white text-4 font-medium hover:opacity-90 transition-opacity cursor-pointer border-0 disabled:opacity-40"
+        style={`top:760px;left:calc(80px + 296px + 16px);background:${plan.couleur};`}>
+        <Image src={lockIcon} alt="" width={17} height={17} class="brightness-0 invert" />
+        Payer {plan.prix}€ / mois
+      </button>
+
+      <!-- SSL badge -->
+      <div class="absolute flex items-center justify-center gap-1.5" style="top:836px;left:80px;width:624px;">
+        <Image src={lockIcon} alt="" width={13} height={13} style="filter:invert(64%) sepia(54%) saturate(429%) hue-rotate(73deg) brightness(94%) contrast(88%)" />
+        <span class="text-primary-500 text-3 font-bold">Paiement SSL sécurisé</span>
+      </div>
+
+    </form>
+
+    <!-- Hauteur minimale du fond -->
+    <div style="height:880px;"></div>
+
+  </section>
+
+</Layout>
+
+<script is:inline define:vars={{ PB_URL, token, userId, planPbValue, planId }}>
+  document.getElementById('demo-close').addEventListener('click', function () {
+    document.getElementById('demo-overlay').style.display = 'none';
+  });
+
+  function fmtCard(el) {
+    el.addEventListener('input', function () {
+      var v = this.value.replace(/\D/g, '').slice(0, 16);
+      this.value = v.replace(/(.{4})/g, '$1  ').trim();
+    });
+  }
+  function fmtExpiry(el) {
+    el.addEventListener('input', function () {
+      var v = this.value.replace(/\D/g, '').slice(0, 4);
+      this.value = v.length >= 3 ? v.slice(0, 2) + ' / ' + v.slice(2) : v;
+    });
+  }
+  function fmtCvv(el) {
+    el.addEventListener('input', function () {
+      this.value = this.value.replace(/\D/g, '').slice(0, 3);
+    });
+  }
+
+  ['card-number','card-number-m'].forEach(function(id) { var el = document.getElementById(id); if (el) fmtCard(el); });
+  ['card-expiry','card-expiry-m'].forEach(function(id) { var el = document.getElementById(id); if (el) fmtExpiry(el); });
+  ['card-cvv','card-cvv-m'].forEach(function(id)    { var el = document.getElementById(id); if (el) fmtCvv(el); });
+
+  async function updateAbonnement() {
+    var newPlan = planPbValue[planId];
+    if (!newPlan || !token || !userId) return;
+    try {
+      await fetch(PB_URL + '/api/collections/users/records/' + userId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ abonnements: newPlan }),
+      });
+    } catch (_) {}
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    var btn = document.getElementById('btn-pay');
+    if (btn) { btn.disabled = true; btn.textContent = 'Traitement…'; }
+    setTimeout(async function () {
+      await updateAbonnement();
+      document.getElementById('success-overlay').style.display = 'flex';
+    }, 1500);
+  }
+
+  ['payment-form','payment-form-mobile'].forEach(function(id) {
+    var f = document.getElementById(id);
+    if (f) f.addEventListener('submit', handleSubmit);
+  });
+</script>

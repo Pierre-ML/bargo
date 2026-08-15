@@ -1,0 +1,372 @@
+---
+// @ts-nocheck
+import Layout from '../../layouts/Layout.astro';
+import { Image } from 'astro:assets';
+import PbImage from '../../components/PbImage.astro';
+import { getRecord, getImageUrl } from '../../../backend/backend.js';
+import heartIcon          from '../../assets/icon/heart.svg';
+import bulleMessageIcon   from '../../assets/icon/bulle_de_message.svg';
+import likeFillIcon  from '../../assets/icon/like_fill.svg';
+import partageIcon  from '../../assets/icon/partage.svg';
+import notifIcon    from '../../assets/icon/notifcation.svg';
+import instaIcon    from '../../assets/icon/insta.svg';
+import linkedinIcon from '../../assets/icon/linkedin.svg';
+import discordIcon  from '../../assets/icon/discord.svg';
+import fbIcon       from '../../assets/icon/facebook.svg';
+
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+const isAuth = !!(token && userId);
+
+const { id } = Astro.params;
+if (!id) return Astro.redirect('/bar');
+
+const bar = await getRecord('bar', id + '?expand=boison');
+if (!bar || bar.code === 404) return Astro.redirect('/bar');
+
+const jours = [
+  { label: 'Lundi',    value: bar.horaires_lundi    ?? '' },
+  { label: 'Mardi',    value: bar.horaires_mardi    ?? '' },
+  { label: 'Mercredi', value: bar.horaires_mercredi ?? '' },
+  { label: 'Jeudi',    value: bar.horaires_jeudi    ?? '' },
+  { label: 'Vendredi', value: bar.horaires_vendredi ?? '' },
+  { label: 'Samedi',   value: bar.horaires_samedi   ?? '' },
+  { label: 'Dimanche', value: bar.horaires_dimanche ?? '' },
+];
+
+const galerie = bar.galerie ?? [];
+const landscapePhotos = galerie.slice(0, 3);
+const portraitPhotos  = galerie.slice(3, 7);
+
+const lat = bar.localisation?.lat ?? 0;
+const lon = bar.localisation?.lon ?? 0;
+const hasMap = lat !== 0 && lon !== 0;
+---
+
+<Layout title={`${bar.nom ?? 'Bar'} — Bargo`}>
+
+<!-- =====================================================
+     MOBILE
+===================================================== -->
+<div class="block lg:hidden bg-neutral-200">
+
+  <!-- Photo hero avec titre + icônes -->
+  <div class="relative w-full h-90 overflow-hidden">
+    <PbImage record={bar} recordImage={bar.img?.[0]} width={800} height={400} />
+    <!-- Gradient sombre en bas -->
+    <div class="absolute inset-0 pointer-events-none bar-hero-gradient-mobile"></div>
+    <!-- Titre -->
+    <h1 class="absolute left-5 text-white uppercase m-0 text-8 leading-tight" style="bottom: 88px;">{bar.nom}</h1>
+    <!-- Icônes réseaux (gauche) + actions (droite) -->
+    <div class="absolute bottom-4 left-5 right-5 flex items-center justify-between">
+      <div class="flex gap-4">
+        <Image src={instaIcon}    alt="Instagram" width={22} height={22} class="brightness-0 invert" />
+        <Image src={linkedinIcon} alt="LinkedIn"  width={22} height={22} class="brightness-0 invert" />
+        <Image src={discordIcon}  alt="Discord"   width={22} height={22} class="brightness-0 invert" />
+        <Image src={fbIcon}       alt="Facebook"  width={22} height={22} class="brightness-0 invert" />
+      </div>
+      <div class="flex gap-4">
+        <Image src={notifIcon}   alt="Notifier" width={22} height={22} class="brightness-0 invert" />
+        <Image src={partageIcon} alt="Partager" width={22} height={22} class="brightness-0 invert" />
+        {isAuth && (
+          <button class="like-btn-bar p-0 border-0 bg-transparent cursor-pointer" data-id={bar.id} type="button" aria-label="Favori">
+            <Image src={heartIcon}   alt="" width={22} height={22} class="brightness-0 invert like-empty" />
+            <Image src={likeFillIcon} alt="" width={22} height={22} class="hidden like-filled" />
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+
+  <!-- Description -->
+  <div class="px-5 py-6 bg-white">
+    <p class="text-neutral-500 text-4 font-medium leading-snug m-0">{bar.description ?? ''}</p>
+  </div>
+
+  <!-- Infos : Adresse, Spécialités, Disponibilité, Contact -->
+  <div class="bg-neutral-800 px-5 py-6 flex flex-col gap-6">
+    <div>
+      <h3 class="text-white m-0 mb-2">Adresse</h3>
+      <p class="text-neutral-300 text-4 font-medium leading-snug m-0">{bar.adresse ?? '—'}</p>
+    </div>
+    <div>
+      <h3 class="text-white m-0 mb-2">Spécialités</h3>
+      <p class="text-neutral-300 text-4 font-medium leading-snug m-0">{bar.specialites ?? '—'}</p>
+    </div>
+    <div>
+      <h3 class="text-white m-0 mb-2">Disponibilité</h3>
+      <p class="text-neutral-300 text-4 font-medium leading-snug m-0">{bar.disponibilite ?? '—'}</p>
+    </div>
+    <div>
+      <h3 class="text-white m-0 mb-2">Contact</h3>
+      <p class="text-neutral-300 text-4 font-medium leading-snug m-0">{bar.contact ?? '—'}</p>
+    </div>
+  </div>
+
+  <!-- Horaires -->
+  <div class="bg-primary-900 px-5 py-6">
+    <h3 class="text-white m-0 mb-4">Horaires</h3>
+    <div class="flex flex-col gap-3">
+      {jours.map((jour) => {
+        const isFerme = !jour.value || jour.value.toLowerCase().includes('ferm');
+        return (
+          <div class="h-11.75 rounded-1.25 overflow-hidden flex shadow-md">
+            <div class="w-27.5 shrink-0 bg-primary-600 flex items-center justify-center">
+              <span class="text-neutral-200 text-3.5 font-medium">{jour.label}</span>
+            </div>
+            <div class="flex-1 bg-neutral-200 flex items-center px-4">
+              <span class={`text-3.5 font-medium ${isFerme ? 'text-neutral-500' : 'text-black'}`}>
+                {jour.value || 'Fermé'}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+
+  <!-- Carte -->
+  <div id="bar-map-mobile"
+    data-leaflet-map
+    data-lat={lat}
+    data-lon={lon}
+    data-name={bar.nom}
+    class="w-full h-70 bg-neutral-300 flex items-center justify-center">
+    {!hasMap && (
+      <p class="text-neutral-500 text-4 font-medium m-0">Localisation non disponible</p>
+    )}
+  </div>
+
+  <!-- Galerie photos -->
+  {galerie.length > 0 && (
+    <div class="px-5 py-6 bg-neutral-200">
+      <h2 class="text-black m-0 mb-4 text-7">Galerie</h2>
+      <div class="grid grid-cols-2 gap-3">
+        {galerie.slice(0, 6).map((img) => (
+          <div class="h-35 rounded-1.25 overflow-hidden">
+            <PbImage record={bar} recordImage={img} alt={bar.nom}
+              class="w-full h-full object-cover" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+
+  <!-- Boissons -->
+  {(bar.expand?.boison ?? []).length > 0 && (
+    <div class="px-5 py-6 bg-neutral-200">
+      <h2 class="text-black m-0 mb-4 text-7">Boissons</h2>
+      <p class="text-neutral-500 text-3.5 font-medium leading-snug m-0 mb-5">
+        Explorez une sélection variée de cocktails et de bières, idéale pour partager un moment entre amis.
+      </p>
+      <div class="grid grid-cols-2 gap-3">
+        {(bar.expand.boison ?? []).map((boisson) => (
+          <div class="h-35 rounded-1.25 overflow-hidden">
+            <PbImage record={boisson} recordImage={boisson.img} alt={boisson.nom}
+              class="w-full h-full object-cover" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+
+</div>
+
+<!-- =====================================================
+     DESKTOP (original)
+===================================================== -->
+<div class="hidden lg:block relative bg-neutral-200" style="height:3312px; overflow:clip;">
+
+  <!-- Photo pleine largeur -->
+  <div class="absolute top-0 left-0 w-full h-132.5 overflow-hidden">
+    <PbImage record={bar} recordImage={bar.img?.[0]} width={1440} height={530} />
+  </div>
+
+  <!-- Gradient overlay -->
+  <div class="absolute top-17.5 left-0 w-full h-115 pointer-events-none bar-hero-gradient-desktop"></div>
+
+  <!-- Fond sombre (gauche, pleine largeur jusqu'au centre) -->
+  <div class="absolute top-198.5 left-0 h-167.5 bg-neutral-800" style="width: calc(50% - 16px);"></div>
+  <!-- Fond vert (droite, du centre jusqu'au bord) -->
+  <div class="absolute top-198.5 right-0 h-167.5 bg-primary-900" style="left: calc(50% - 16px);"></div>
+
+  <!-- CARTE pleine largeur -->
+  <div id="bar-map"
+    data-leaflet-map
+    data-lat={lat}
+    data-lon={lon}
+    data-name={bar.nom}
+    class="absolute left-0 w-full z-3 bg-neutral-300 flex items-center justify-center"
+    style="top: 1464px; height: 541px;">
+    {!hasMap && (
+      <p class="text-neutral-500 text-4 font-medium m-0">Localisation non disponible</p>
+    )}
+  </div>
+
+  <!-- Wrapper centré pour tout le contenu -->
+  <div class="absolute top-0 left-1/2 -translate-x-1/2 h-full w-full max-w-360 z-2">
+
+    <!-- Nom du bar -->
+    <h1 class="absolute top-88 left-20 text-white uppercase m-0">
+      {bar.nom}
+    </h1>
+
+    <!-- Icônes réseaux sociaux -->
+    <div class="absolute top-112.25" style="left: calc(83.33% - 17px)">
+      <Image src={instaIcon}   alt="Instagram" width={24} height={24} class="brightness-0 invert" />
+    </div>
+    <div class="absolute top-112.25" style="left: calc(83.33% + 32px)">
+      <Image src={linkedinIcon} alt="LinkedIn" width={24} height={24} class="brightness-0 invert" />
+    </div>
+    <div class="absolute top-112.25" style="left: calc(91.67% - 39px)">
+      <Image src={discordIcon}  alt="Discord"   width={24} height={24} class="brightness-0 invert" />
+    </div>
+    <div class="absolute top-112.25" style="left: calc(91.67% + 10px)">
+      <Image src={fbIcon}       alt="Facebook"  width={24} height={24} class="brightness-0 invert" />
+    </div>
+
+    <!-- Actions -->
+    <div class="absolute top-150.5" style="left: calc(83.33% - 17px)">
+      <Image src={notifIcon}   alt="Notifier" width={24} height={24} />
+    </div>
+    <div class="absolute top-150.5" style="left: calc(83.33% + 32px)">
+      <Image src={partageIcon} alt="Partager" width={24} height={24} />
+    </div>
+    <div class="absolute top-150.5" style="left: calc(91.67% - 39px)">
+      <Image src={bulleMessageIcon} alt="" width={24} height={24} class="brightness-0" />
+    </div>
+    {isAuth && (
+      <div class="absolute top-150.5" style="left: calc(91.67% + 10px)">
+        <button class="like-btn-bar p-0 border-0 bg-transparent cursor-pointer" data-id={bar.id} type="button" aria-label="Favori">
+          <Image src={heartIcon}    alt="" width={24} height={24} class="like-empty" />
+          <Image src={likeFillIcon} alt="" width={24} height={24} class="hidden like-filled" />
+        </button>
+      </div>
+    )}
+
+    <!-- Description -->
+    <p class="absolute top-152.25 left-20 w-183.25 text-neutral-500 text-4 font-medium leading-snug m-0">
+      {bar.description ?? ''}
+    </p>
+
+    <!-- INFOS GAUCHE -->
+    <h3 class="absolute top-213 left-20 text-white m-0">Adresse</h3>
+    <p class="absolute top-227.25 left-20 text-neutral-300 text-4 font-medium leading-snug m-0">
+      {bar.adresse ?? '—'}
+    </p>
+    <h3 class="absolute top-247.5 left-20 text-white m-0">Spécialités</h3>
+    <p class="absolute top-261.75 left-20 text-neutral-300 text-4 font-medium leading-snug m-0 w-135">
+      {bar.specialites ?? '—'}
+    </p>
+    <h3 class="absolute top-282 left-20 text-white m-0">Disponibilité</h3>
+    <p class="absolute top-296.25 left-20 text-neutral-300 text-4 font-medium leading-snug m-0 w-135">
+      {bar.disponibilite ?? '—'}
+    </p>
+    <h3 class="absolute top-316.5 left-20 text-white m-0">Contact</h3>
+    <p class="absolute top-330.75 left-20 text-neutral-300 text-4 font-medium leading-snug m-0">
+      {bar.contact ?? '—'}
+    </p>
+
+    <!-- HORAIRES (droite) -->
+    <h3 class="absolute top-211 text-white m-0" style="left: calc(50% + 16px)">Horaires</h3>
+
+    {jours.map((jour, i) => {
+      const top = 909 + i * 64;
+      const isFerme = !jour.value || jour.value.toLowerCase().includes('ferm');
+      return (
+        <div class="absolute w-156 h-11.75 rounded-1.25 overflow-hidden"
+          style={`top: ${top}px; left: calc(50% + 16px); box-shadow: 0px 4px 10px 0px rgba(0,0,0,0.25);`}>
+          <div class="absolute top-0 left-0 h-full bg-primary-600 rounded-l-1.25 flex items-center justify-center"
+            style="width: 21.63%;">
+            <span class="text-neutral-200 text-4 font-medium leading-snug text-center px-2">
+              {jour.label}
+            </span>
+          </div>
+          <div class="absolute top-0 right-0 h-full bg-neutral-200 rounded-r-1.25 flex items-center"
+            style="left: 21.63%; padding-left: 35px;">
+            <span class={`text-4 font-medium leading-snug ${isFerme ? 'text-neutral-500' : 'text-black'}`}>
+              {jour.value || 'Fermé'}
+            </span>
+          </div>
+        </div>
+      );
+    })}
+
+    <!-- GALERIE -->
+    <h2 class="absolute left-20 text-black m-0" style="top: 2136px;">Galerie</h2>
+
+    {(bar.expand?.boison ?? []).length > 0 && (
+      <p class="absolute left-20 w-101.25 text-neutral-500 text-4 font-medium leading-snug m-0" style="top: 2223px;">
+        Explorez une sélection variée de cocktails et de bières, idéale pour partager un moment entre amis.
+      </p>
+    )}
+
+    {landscapePhotos.length > 0 ? (
+      <>
+        {landscapePhotos[0] && (
+          <div class="absolute overflow-hidden rounded-tr-1.25 rounded-br-1.25"
+            style="top: 2363px; left: 0; width: 465px; height: 400px;">
+            <PbImage record={bar} recordImage={landscapePhotos[0]} alt={bar.nom}
+              class="w-full h-full object-cover" />
+          </div>
+        )}
+        {landscapePhotos[1] && (
+          <div class="absolute overflow-hidden rounded-1.25"
+            style="top: 2363px; left: calc(33.33% + 7px); width: 465px; height: 400px;">
+            <PbImage record={bar} recordImage={landscapePhotos[1]} alt={bar.nom}
+              class="w-full h-full object-cover" />
+          </div>
+        )}
+        {landscapePhotos[2] && (
+          <div class="absolute overflow-hidden rounded-tl-1.25 rounded-bl-1.25"
+            style="top: 2363px; left: calc(66.67% + 15px); width: 465px; height: 400px;">
+            <PbImage record={bar} recordImage={landscapePhotos[2]} alt={bar.nom}
+              class="w-full h-full object-cover" />
+          </div>
+        )}
+      </>
+    ) : (
+      <p class="absolute left-20 text-neutral-500 text-4 font-medium m-0" style="top: 2363px;">
+        Aucune photo disponible.
+      </p>
+    )}
+
+    <!-- BOISSONS desktop -->
+    {(bar.expand?.boison ?? []).map((boisson, i) => {
+      const positions = [
+        'left: 80px',
+        'left: calc(25% + 48px)',
+        'left: calc(50% + 16px)',
+        'left: calc(75% - 16px)',
+      ];
+      if (i >= 4) return null;
+      return (
+        <div class="absolute overflow-hidden rounded-1.25"
+          style={`top: 2854px; ${positions[i]}; width: 296px; height: 310px;`}>
+          <PbImage record={boisson} recordImage={boisson.img} alt={boisson.nom}
+            class="w-full h-full object-cover" />
+        </div>
+      );
+    })}
+
+  </div><!-- /wrapper centré -->
+
+</div><!-- /desktop wrapper -->
+
+  <style>
+    .bar-hero-gradient-mobile {
+      background: linear-gradient(to bottom, rgba(30,30,30,0) 40%, rgba(30,30,30,0.9) 100%);
+    }
+    .bar-hero-gradient-desktop {
+      background: linear-gradient(to bottom, rgba(30,30,30,0) 0%, rgba(30,30,30,0.9) 100%);
+    }
+  </style>
+
+  {isAuth && <div id="auth-meta" data-token={token} data-user-id={userId} hidden></div>}
+
+  <script>
+    import '../../js/leaflet-map.js';
+    import '../../js/like.js';
+  </script>
+
+</Layout>

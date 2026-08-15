@@ -1,0 +1,135 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { Image } from 'astro:assets';
+import facebookIcon from '../assets/icon/facebook.svg';
+import instaIcon    from '../assets/icon/insta.svg';
+import discordIcon  from '../assets/icon/discord.svg';
+import mailIcon     from '../assets/icon/mail.svg';
+import phoneIcon    from '../assets/icon/phone.svg';
+import mapPinIcon   from '../assets/icon/map_pin.svg';
+import LeafletMap   from '../components/LeafletMap.astro';
+---
+
+<Layout title="Contact — Bargo">
+
+  <section class="flex flex-col lg:flex-row min-h-256">
+
+    <!-- ===== COLONNE GAUCHE (sombre) ===== -->
+    <div class="w-full lg:w-176 lg:shrink-0 bg-neutral-800 lg:relative px-5 pt-10 pb-10 lg:px-0 lg:pt-0 lg:pb-0">
+
+      <!-- Titre -->
+      <h2 class="text-white m-0 mb-8 lg:mb-0 lg:absolute lg:top-55.75 lg:left-48.75">
+        <span class="text-primary-500">Nous</span> Contacter
+      </h2>
+
+      <!-- Formulaire -->
+      <form
+        method="POST"
+        action="#"
+        class="flex flex-col gap-6.75 lg:absolute lg:top-87.75 lg:left-48.75 lg:w-107.5"
+      >
+        <!-- Nom -->
+        <div class="border-b border-neutral-200 pb-2.5">
+          <input
+            type="text"
+            name="nom"
+            placeholder="Nom"
+            class="bg-transparent w-full text-neutral-200 text-4 font-medium outline-none placeholder-neutral-200 pl-2"
+          />
+        </div>
+
+        <!-- Email -->
+        <div class="border-b border-neutral-200 pb-2.5">
+          <input
+            type="email"
+            name="email"
+            placeholder="Email"
+            class="bg-transparent w-full text-neutral-200 text-4 font-medium outline-none placeholder-neutral-200 pl-2"
+          />
+        </div>
+
+        <!-- Message -->
+        <div class="border-b border-neutral-200">
+          <textarea
+            name="message"
+            placeholder="Message"
+            rows="5"
+            class="bg-transparent w-full text-neutral-200 text-4 font-medium outline-none placeholder-neutral-200 pl-2 resize-none"
+          ></textarea>
+        </div>
+
+        <!-- Newsletter -->
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" name="newsletter" class="size-4 rounded-1 border border-white accent-primary-600" />
+          <span class="text-white text-3.5 font-medium leading-tight">J'aimerais recevoir les News Letter</span>
+        </label>
+
+        <!-- Bouton Envoyer -->
+        <button
+          type="submit"
+          class="mt-5 lg:mt-15 bg-primary-600 h-15 w-full lg:w-59.25 flex items-center justify-center text-white text-4 font-medium hover:brightness-110 active:scale-[0.97] transition-all cursor-pointer border-0"
+        >
+          Envoyer
+        </button>
+      </form>
+
+    </div>
+
+    <!-- ===== COLONNE DROITE (beige) ===== -->
+    <div class="flex-1 bg-neutral-200 lg:relative">
+
+      <div class="px-5 py-10 lg:px-0 lg:py-0 flex flex-col gap-7 lg:absolute lg:top-83.5 lg:left-35.25 lg:w-101.75">
+
+        <!-- Description -->
+        <p class="text-black text-4 font-medium leading-snug m-0">
+          Si vous voulez nous contacter pour des demandes spécifiques, n'hésitez pas à nous
+          contacter via les informations ci-dessous&nbsp;!
+        </p>
+
+        <!-- Carte OpenStreetMap — IUT de Montbéliard -->
+        <div class="w-full h-43.5 rounded-2.5 overflow-hidden z-0 bg-neutral-300">
+          <LeafletMap
+            id="contact-map"
+            lat={47.5072}
+            lon={6.7955}
+            name="IUT de Montbéliard"
+            class="w-full h-full"
+          />
+        </div>
+
+        <!-- Informations de contact -->
+        <div class="flex flex-col gap-3.5">
+          <div class="flex items-center gap-4">
+            <Image src={mailIcon} alt="" width={22} height={18} />
+            <span class="text-black text-4 font-medium">BARGO@gmail.com</span>
+          </div>
+          <div class="flex items-center gap-4">
+            <Image src={phoneIcon} alt="" width={22} height={22} />
+            <span class="text-black text-4 font-medium">+33 3.84.12.34.98</span>
+          </div>
+          <div class="flex items-center gap-4">
+            <Image src={mapPinIcon} alt="" width={22} height={24} />
+            <span class="text-black text-4 font-medium">IUT de Montbéliard — 4 Pl. Tharradin, 25200</span>
+          </div>
+        </div>
+
+        <!-- Réseaux sociaux -->
+        <div class="flex items-center gap-5 mt-2">
+          <a href="#" class="hover:opacity-70 transition-opacity">
+            <Image src={facebookIcon} alt="Facebook" width={24} height={24} />
+          </a>
+          <a href="#" class="hover:opacity-70 transition-opacity">
+            <Image src={instaIcon} alt="Instagram" width={24} height={24} />
+          </a>
+          <a href="#" class="hover:opacity-70 transition-opacity">
+            <Image src={discordIcon} alt="Discord" width={24} height={24} />
+          </a>
+        </div>
+
+      </div>
+    </div>
+
+  </section>
+
+</Layout>
+

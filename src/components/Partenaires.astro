@@ -1,0 +1,52 @@
+---
+import { Image } from 'astro:assets';
+import part1 from '../assets/img/partenaires-1.avif';
+import part2 from '../assets/img/partenaires-2.avif';
+import part3 from '../assets/img/partenaires-3.avif';
+import part4 from '../assets/img/partenaires-4.avif';
+---
+
+<section class="bg-primary-900 flex flex-col justify-center w-full py-10 lg:py-16 min-h-auto lg:min-h-134.75" id="partenaires">
+  <div class="max-w-360 mx-auto px-4 lg:px-20 w-full mb-8 lg:mb-16">
+    <h2 class="text-white text-center m-0 text-7 lg:text-12.5">Nos partenaires</h2>
+  </div>
+  <div id="partners-carousel" class="partners-carousel w-full overflow-x-scroll cursor-grab select-none">
+    <div class="partners-carousel__track flex gap-5 lg:gap-12.5 px-4 lg:px-20">
+      <div class="w-35 h-35 lg:w-62.5 lg:h-62.5 rounded-1.25 overflow-hidden shrink-0">
+        <Image src={part1} alt="Partenaire 1" class="w-full h-full object-cover block pointer-events-none" />
+      </div>
+      <div class="w-35 h-35 lg:w-62.5 lg:h-62.5 rounded-1.25 overflow-hidden shrink-0">
+        <Image src={part2} alt="Partenaire 2" class="w-full h-full object-cover block pointer-events-none" />
+      </div>
+      <div class="w-35 h-35 lg:w-62.5 lg:h-62.5 rounded-1.25 overflow-hidden shrink-0">
+        <Image src={part3} alt="Partenaire 3" class="w-full h-full object-cover block pointer-events-none" />
+      </div>
+      <div class="w-35 h-35 lg:w-62.5 lg:h-62.5 rounded-1.25 overflow-hidden shrink-0">
+        <Image src={part4} alt="Partenaire 4" class="w-full h-full object-cover block pointer-events-none" />
+      </div>
+      <div class="w-35 h-35 lg:w-62.5 lg:h-62.5 rounded-1.25 overflow-hidden shrink-0">
+        <Image src={part1} alt="Partenaire 5" class="w-full h-full object-cover block pointer-events-none" />
+      </div>
+      <div class="w-35 h-35 lg:w-62.5 lg:h-62.5 rounded-1.25 overflow-hidden shrink-0">
+        <Image src={part2} alt="Partenaire 6" class="w-full h-full object-cover block pointer-events-none" />
+      </div>
+      <div class="w-35 h-35 lg:w-62.5 lg:h-62.5 rounded-1.25 overflow-hidden shrink-0">
+        <Image src={part3} alt="Partenaire 7" class="w-full h-full object-cover block pointer-events-none" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  import '../js/drag-scroll.js';
+</script>
+
+<style>
+  .partners-carousel {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .partners-carousel__track {
+    width: max-content;
+  }
+</style>

@@ -1,4 +1,4 @@
-export const PB_URL = 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr';
+export const PB_URL = import.meta.env.PUBLIC_PB_URL ?? 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr';
 
 /**
  * Construit l'URL d'une image PocketBase.

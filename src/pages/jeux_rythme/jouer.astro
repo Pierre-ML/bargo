@@ -1,7 +1,6 @@
 ---
 // @ts-nocheck
 import Layout from '../../layouts/Layout.astro';
-import { PB_URL } from '../../../backend/backend.js';
 
 const token  = Astro.cookies.get('pb_token')?.value ?? '';
 const userId = Astro.cookies.get('pb_user_id')?.value ?? '';
@@ -152,8 +151,6 @@ const cfg = configs[difficulty] ?? configs.facile;
     data-base-pts={String(cfg.basePts)}
     data-total-time={String(TOTAL_TIME)}
     data-session-id={sessionId}
-    data-pb-url={PB_URL}
-    data-token={token}
     data-user-id={userId}
     data-in-session={String(inSession)}
   ></div>

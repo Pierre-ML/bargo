@@ -47,7 +47,7 @@ btn.addEventListener('click', async function () {
   btn.textContent = '...';
 
   try {
-    var res = await fetch('https://pbbargo.pierre-mouilleseaux-lhuillier.fr/api/collections/users/records', {
+    var res = await fetch('/api/pb/collections/users/records', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pseudo: pseudo, email: email, password: password, passwordConfirm: confirm })

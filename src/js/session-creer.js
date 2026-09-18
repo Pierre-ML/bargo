@@ -1,11 +1,11 @@
 // @ts-nocheck
+// Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+// vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
 (function () {
   var d        = JSON.parse(document.getElementById('app-data').textContent);
   var allBars  = d.bars;
   var allJeux  = d.jeux;
   var allUsers = d.users;
-  var PB_URL   = d.PB_URL;
-  var TOKEN    = d.token;
   var USER_ID  = d.userId;
   var barFavori = d.barFavori || [];
 
@@ -29,7 +29,7 @@
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
   function imgUrl(rec, file) {
-    return file ? PB_URL + '/api/files/' + rec.collectionName + '/' + rec.id + '/' + file : null;
+    return file ? '/pb-files/' + rec.collectionName + '/' + rec.id + '/' + file : null;
   }
   function thumb(url, alt) {
     if (!url) return '<div style="width:100%;height:100%;background:#e7e5e5;border-radius:5px 0 0 5px;"></div>';
@@ -257,9 +257,9 @@
   // ── Friend request ────────────────────────────────────────────────
   async function sendFriendRequest(recipientId) {
     try {
-      var res = await fetch(PB_URL+'/api/collections/users/records/'+recipientId, {
+      var res = await fetch('/api/pb/collections/users/records/'+recipientId, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer '+TOKEN },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 'demande_amies+': [USER_ID] }),
       });
       if (res.ok) {
@@ -315,9 +315,9 @@
     };
 
     try {
-      var res = await fetch(PB_URL + '/api/collections/session_barathon/records', {
+      var res = await fetch('/api/pb/collections/session_barathon/records', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+        headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('Erreur ' + res.status);
@@ -326,17 +326,15 @@
       // Envoyer une invitation de session à chaque ami invité
       for (var i = 0; i < selectedAmis.length; i++) {
         try {
-          var uRes = await fetch(PB_URL + '/api/collections/users/records/' + selectedAmis[i].id, {
-            headers: { Authorization: 'Bearer ' + TOKEN }
-          });
+          var uRes = await fetch('/api/pb/collections/users/records/' + selectedAmis[i].id);
           if (uRes.ok) {
             var uData = await uRes.json();
             var existing = Array.isArray(uData.demande_session) ? uData.demande_session : [];
             if (existing.indexOf(session.id) < 0) {
               existing.push(session.id);
-              await fetch(PB_URL + '/api/collections/users/records/' + selectedAmis[i].id, {
+              await fetch('/api/pb/collections/users/records/' + selectedAmis[i].id, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ demande_session: existing }),
               });
             }

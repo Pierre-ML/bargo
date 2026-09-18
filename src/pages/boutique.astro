@@ -7,8 +7,7 @@ import Pagination from '../components/Pagination.astro';
 import HeroSection from '../components/HeroSection.astro';
 import likeIcon     from '../assets/icon/like.svg';
 import likeFillIcon from '../assets/icon/like_fill.svg';
-
-const PB_URL = 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr';
+import { PB_URL } from '../../backend/backend.js';
 
 const page      = parseInt(Astro.url.searchParams.get('page') ?? '1');
 const activeTab = Astro.url.searchParams.get('tab') ?? 'decoration_avatar';
@@ -242,12 +241,14 @@ function getButtonState(produit) {
   <!-- Toast feedback -->
   <div id="boutique-toast" style="position:fixed; bottom:100px; left:50%; transform:translateX(-50%) translateY(20px); background:#1E1E1E; color:white; padding:12px 24px; border-radius:8px; font-size:14px; font-family:'Inter',sans-serif; font-weight:500; opacity:0; transition:opacity 0.25s,transform 0.25s; pointer-events:none; z-index:300; white-space:nowrap;"></div>
 
-  <script is:inline define:vars={{ token, userId, isAuth, PB_URL, perPage, activeTab,
+  <script is:inline define:vars={{ userId, isAuth, perPage, activeTab,
     possedDecoration, possedTitre, possedTheme,
     equipedDecoration, equipedTitre, equipedTheme,
     userPoints,
     likeIconSrc: likeIcon.src, likeFillIconSrc: likeFillIcon.src }}>
 (function () {
+  // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+  // vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
 
   // ── LIKE (items_favori) ──────────────────────────────────────────────────────
   var favs = { items_favori: [] };
@@ -266,12 +267,12 @@ function getButtonState(produit) {
       filledEl && filledEl.classList.remove('hidden');
     }
     favs[field] = updated;
-    if (!token || !userId) return;
+    if (!userId) return;
     var body = {};
     body[field] = updated;
-    fetch(PB_URL + '/api/collections/users/records/' + userId, {
+    fetch('/api/pb/collections/users/records/' + userId, {
       method:  'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body),
     }).catch(function () {
       favs[field] = current;
@@ -300,10 +301,8 @@ function getButtonState(produit) {
     });
   }
 
-  if (token && userId) {
-    fetch(PB_URL + '/api/collections/users/records/' + userId, {
-      headers: { Authorization: 'Bearer ' + token },
-    })
+  if (userId) {
+    fetch('/api/pb/collections/users/records/' + userId)
     .then(function (r) { return r.ok ? r.json() : {}; })
     .then(function (user) {
       favs.items_favori = Array.isArray(user.items_favori) ? user.items_favori : [];
@@ -381,9 +380,9 @@ function getButtonState(produit) {
     var newPossed = (state.possed[itemType] || []).concat([itemId]);
     var newPoints = state.points - prix;
     try {
-      var res = await fetch(PB_URL + '/api/collections/users/records/' + userId, {
+      var res = await fetch('/api/pb/collections/users/records/' + userId, {
         method:  'PATCH',
-        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ [field]: newPossed, points: newPoints }),
       });
       if (!res.ok) throw new Error();
@@ -410,9 +409,9 @@ function getButtonState(produit) {
     btn.disabled    = true;
     btn.textContent = '...';
     try {
-      var res = await fetch(PB_URL + '/api/collections/users/records/' + userId, {
+      var res = await fetch('/api/pb/collections/users/records/' + userId, {
         method:  'PATCH',
-        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ [field]: itemId }),
       });
       if (!res.ok) throw new Error();
@@ -446,7 +445,7 @@ function getButtonState(produit) {
   function cardHtml(p) {
     var imgField = p.type === 'decoration_avatar' ? p.type_decoration_avatar :
                    p.type === 'theme'             ? p.type_them              : null;
-    var imgSrc   = imgField ? PB_URL + '/api/files/' + p.collectionName + '/' + p.id + '/' + imgField : '';
+    var imgSrc   = imgField ? '/pb-files/' + p.collectionName + '/' + p.id + '/' + imgField : '';
     var prix     = p.prix || 0;
     var s        = getState(p.id, p.type, prix);
 
@@ -519,7 +518,7 @@ function getButtonState(produit) {
 
   async function loadTab(tabId) {
     var filter = encodeURIComponent('type="' + tabId + '"');
-    var url    = PB_URL + '/api/collections/boutique/records?page=1&perPage=' + perPage + '&sort=created&filter=' + filter;
+    var url    = '/api/pb/collections/boutique/records?page=1&perPage=' + perPage + '&sort=created&filter=' + filter;
     var res    = await fetch(url);
     var data   = res.ok ? await res.json() : { items: [] };
     var items  = data.items || [];

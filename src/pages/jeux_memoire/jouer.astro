@@ -2,7 +2,7 @@
 // @ts-nocheck
 import Layout from '../../layouts/Layout.astro';
 import { Image } from 'astro:assets';
-import { getCollection, getImageUrl, PB_URL } from '../../../backend/backend.js';
+import { getCollection, getImageUrl } from '../../../backend/backend.js';
 import heartFill from '../../assets/icon/like_fill.svg';
 import '../../styles/memory-game.css';
 
@@ -231,8 +231,6 @@ const timeDisplay = totalTime > 0 ? fmtTime(totalTime) : null;
     data-max-lives={String(maxLives)}
     data-multiplier={String(multiplier)}
     data-pts-per-pair={String(ptsPerPair)}
-    data-pb-url={PB_URL}
-    data-token={token}
     data-user-id={userId}
     data-in-session={String(inSession)}
   ></div>

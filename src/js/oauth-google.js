@@ -1,6 +1,6 @@
 // Authentification Google via PocketBase OAuth2 (PKCE)
-
-const PB_URL = 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr';
+// Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+// vers PB_URL (privé) côté serveur.
 
 document.querySelectorAll('.btn-google-oauth').forEach(btn => {
   btn.addEventListener('click', async () => {
@@ -10,7 +10,7 @@ document.querySelectorAll('.btn-google-oauth').forEach(btn => {
       const redirectUrl = window.location.origin + '/oauth2-redirect';
 
       const res  = await fetch(
-        PB_URL + '/api/collections/users/auth-methods?redirectUrl=' + encodeURIComponent(redirectUrl)
+        '/api/pb/collections/users/auth-methods?redirectUrl=' + encodeURIComponent(redirectUrl)
       );
       const data = await res.json();
       const google = data.authProviders?.find(p => p.name === 'google');

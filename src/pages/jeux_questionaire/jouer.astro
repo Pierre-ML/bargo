@@ -1,12 +1,11 @@
 ---
 // @ts-nocheck
 import Layout from '../../layouts/Layout.astro';
+import { PB_URL } from '../../../backend/backend.js';
 
 const token  = Astro.cookies.get('pb_token')?.value ?? '';
 const userId = Astro.cookies.get('pb_user_id')?.value ?? '';
 if (!token || !userId) return Astro.redirect('/connexion');
-
-const PB_URL = 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr';
 
 const rawThemes = Astro.url.searchParams.get('themes') ?? '';
 const themes    = rawThemes.split(',').filter(Boolean);
@@ -151,14 +150,14 @@ const questions = allQ.slice(0, 10).map(q => ({
     </main>
   )}
 
-  <script is:inline define:vars={{ quizData: { questions, time, pbUrl: PB_URL, token, userId, inSession } }}>
+  <script is:inline define:vars={{ quizData: { questions, time, userId, inSession } }}>
+    // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+    // vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
     var d = quizData;
     if (!d || !d.questions || d.questions.length === 0) { /* no-op */ } else {
 
     var questions    = d.questions;
     var time         = d.time;
-    var quizPbUrl    = d.pbUrl;
-    var quizToken    = d.token;
     var quizUserId   = d.userId;
     var quizInSession = d.inSession;
 
@@ -245,7 +244,7 @@ const questions = allQ.slice(0, 10).map(q => ({
       var pct = correctCount / questions.length;
       $('result-title').textContent = pct >= 0.8 ? 'Excellent !' : pct >= 0.5 ? 'Bien joué !' : 'Pas mal !';
       var circleSection = $('result-circle-section');
-      if (quizToken && quizUserId) {
+      if (quizUserId) {
         $('result-correct').textContent = String(correctCount);
         $('result-score').textContent   = score + ' pts';
         $('result-mult').textContent    = 'x' + multiplier + ' — ' + ptsPerQ + ' pts par bonne réponse';
@@ -261,15 +260,13 @@ const questions = allQ.slice(0, 10).map(q => ({
     }
 
     function savePoints(pts) {
-      fetch(quizPbUrl + '/api/collections/users/records/' + quizUserId, {
-        headers: { Authorization: 'Bearer ' + quizToken }
-      })
+      fetch('/api/pb/collections/users/records/' + quizUserId)
       .then(function (r) { return r.json(); })
       .then(function (u) {
         var current = u.points ?? 0;
-        return fetch(quizPbUrl + '/api/collections/users/records/' + quizUserId, {
+        return fetch('/api/pb/collections/users/records/' + quizUserId, {
           method:  'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + quizToken },
+          headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ points: current + pts }),
         });
       })

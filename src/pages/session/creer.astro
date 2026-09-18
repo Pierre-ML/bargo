@@ -55,7 +55,7 @@ if (userId && token) {
 
 const amieUsers = users.filter(u => amiesIds.includes(u.id));
 
-const appData = JSON.stringify({ bars, jeux, users: amieUsers, PB_URL, token, userId, barFavori, amiesIds });
+const appData = JSON.stringify({ bars, jeux, users: amieUsers, userId, barFavori, amiesIds });
 ---
 
 <Layout title="Créer un barathon — Bargo">

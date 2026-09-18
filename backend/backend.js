@@ -1,12 +1,17 @@
-export const PB_URL = import.meta.env.PUBLIC_PB_URL ?? 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr';
+// URL interne de PocketBase — appelée UNIQUEMENT côté serveur (SSR ou routes
+// /api/*). PocketBase n'est jamais exposé publiquement : ne jamais transmettre
+// PB_URL au navigateur (pas de define:vars, pas de JSON embarqué dans la page).
+export const PB_URL = import.meta.env.PB_URL ?? 'http://127.0.0.1:8003';
 
 /**
- * Construit l'URL d'une image PocketBase.
+ * Construit l'URL (publique, même origine) d'une image PocketBase.
+ * Passe par la route proxy /pb-files/ plutôt que par PB_URL directement,
+ * car le navigateur du visiteur ne peut pas atteindre PocketBase (privé).
  * @param {Object} record - L'enregistrement PocketBase (doit contenir collectionName et id)
  * @param {string} filename - Le nom du fichier image
  */
 export function getImageUrl(record, filename) {
-  return `${PB_URL}/api/files/${record.collectionName}/${record.id}/${filename}`;
+  return `/pb-files/${record.collectionName}/${record.id}/${filename}`;
 }
 
 /**

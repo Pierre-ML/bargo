@@ -5,8 +5,8 @@ import PbImage from '../components/PbImage.astro';
 import LikeButton from '../components/LikeButton.astro';
 import Pagination from '../components/Pagination.astro';
 import HeroSection from '../components/HeroSection.astro';
+import { PB_URL } from '../../backend/backend.js';
 
-const PB_URL  = 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr';
 const token   = Astro.cookies.get('pb_token')?.value;
 const userId  = Astro.cookies.get('pb_user_id')?.value;
 const isAuth  = !!(token && userId);
@@ -94,7 +94,7 @@ const totalPages = Math.ceil((data.totalItems ?? 0) / perPage);
   <!-- ===== PAGINATION ===== -->
   <Pagination page={page} totalPages={totalPages} currentUrl={Astro.url.href} />
 
-  {isAuth && <div id="auth-meta" data-token={token} data-user-id={userId} hidden></div>}
+  {isAuth && <div id="auth-meta" data-user-id={userId} hidden></div>}
 
   <script>
     import '../js/like.js';

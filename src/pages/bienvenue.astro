@@ -309,7 +309,9 @@ const allUsers = usersRaw
 
 </Layout>
 
-<script is:inline define:vars={{ pbUrl: PB_URL, pbToken: token, pbUserId: userId, allUsers }}>
+<script is:inline define:vars={{ pbUserId: userId, allUsers }}>
+  // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+  // vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
   var TOTAL        = 4;
   var cur          = 1;
   var selectedAmis = [];
@@ -395,9 +397,9 @@ const allUsers = usersRaw
   // ── API ──────────────────────────────────────────────────
   async function patchUser(data) {
     try {
-      await fetch(pbUrl + '/api/collections/users/records/' + pbUserId, {
+      await fetch('/api/pb/collections/users/records/' + pbUserId, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + pbToken },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
     } catch (_) {}
@@ -408,9 +410,8 @@ const allUsers = usersRaw
     try {
       var fd = new FormData();
       fd.append('avatar', avatarFile);
-      await fetch(pbUrl + '/api/collections/users/records/' + pbUserId, {
+      await fetch('/api/pb/collections/users/records/' + pbUserId, {
         method: 'PATCH',
-        headers: { Authorization: 'Bearer ' + pbToken },
         body: fd,
       });
     } catch (_) {}
@@ -441,17 +442,15 @@ const allUsers = usersRaw
         var targetId = selectedAmis[i];
         try {
           // Récupérer les demandes existantes de l'utilisateur cible
-          var r = await fetch(pbUrl + '/api/collections/users/records/' + targetId, {
-            headers: { Authorization: 'Bearer ' + pbToken }
-          });
+          var r = await fetch('/api/pb/collections/users/records/' + targetId);
           if (r.ok) {
             var targetUser = await r.json();
             var existing   = Array.isArray(targetUser.demande_amies) ? targetUser.demande_amies : [];
             if (existing.indexOf(pbUserId) < 0) {
               existing.push(pbUserId);
-              await fetch(pbUrl + '/api/collections/users/records/' + targetId, {
+              await fetch('/api/pb/collections/users/records/' + targetId, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + pbToken },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ demande_amies: existing }),
               });
             }
@@ -471,7 +470,7 @@ const allUsers = usersRaw
 
   // ── Amis ─────────────────────────────────────────────────
   function imgUrl(u) {
-    return u.avatar ? pbUrl + '/api/files/' + u.collectionName + '/' + u.id + '/' + u.avatar : null;
+    return u.avatar ? '/pb-files/' + u.collectionName + '/' + u.id + '/' + u.avatar : null;
   }
 
   function av(u, size) {

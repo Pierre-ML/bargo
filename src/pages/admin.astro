@@ -69,7 +69,7 @@ const allQuestions = ((await questionsRes.json()).items ?? []).map(q => ({
 }));
 
 const pageData = JSON.stringify({
-  PB_URL, token, userId,
+  userId,
   allJeux: allJeux.map(j => ({
     id: j.id, collectionName: j.collectionName,
     nom: j.nom ?? '', description: j.description ?? '',
@@ -505,7 +505,7 @@ const pageData = JSON.stringify({
           const imgFile = b.type === 'decoration_avatar' ? b.type_decoration_avatar :
                           b.type === 'theme'             ? b.type_them              : null;
           const imgSrc = imgFile
-            ? `${PB_URL}/api/files/${b.collectionName}/${b.id}/${imgFile}`
+            ? `/pb-files/${b.collectionName}/${b.id}/${imgFile}`
             : null;
           return (
             <div data-row-boutique={b.id} class="grid grid-cols-[56px_1fr_160px_110px_130px] items-center px-5 py-3 border-b border-gray-100">

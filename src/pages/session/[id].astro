@@ -115,7 +115,7 @@ const pageData = JSON.stringify({
   session: { id: session.id, nom: session.nom, date: session.date_heur_depart?.split(' ')[0] ?? '', heure_debut: session.date_heur_depart?.split(' ')[1]?.substring(0, 5) ?? '', heure_fin: session.date_heur_arriver?.split(' ')[1]?.substring(0, 5) ?? '', description: session.description, automatique, date_heur_depart: session.date_heur_depart ?? null, date_heur_arriver: session.date_heur_arriver ?? null },
   bars, jeux, amis, samIds,
   allBars, allJeux, allAmies,
-  PB_URL, token, isHote, isSam, userId, isEnCours, barActuel,
+  isHote, isSam, userId, isEnCours, barActuel,
 });
 ---
 

@@ -8,8 +8,6 @@ const maxPts     = parseInt(meta.dataset.maxPts);
 const modeBonus  = parseFloat(meta.dataset.modeBonus);
 const totalRounds= parseInt(meta.dataset.totalRounds);
 const sessionId  = meta.dataset.sessionId;
-const pbUrl      = meta.dataset.pbUrl;
-const gameToken  = meta.dataset.token;
 const gameUserId = meta.dataset.userId;
 const inSession  = meta.dataset.inSession === 'true';
 const difficulty = meta.dataset.difficulty;
@@ -173,7 +171,7 @@ function endGame() {
     resultRounds.appendChild(row);
   });
 
-  if (inSession && totalScore > 0 && gameToken && gameUserId) {
+  if (inSession && totalScore > 0 && gameUserId) {
     savePoints(totalScore);
   }
 
@@ -182,13 +180,11 @@ function endGame() {
 
 // ── Sauvegarde points (même système que memory-game) ──────────────────────
 function savePoints(pts) {
-  fetch(pbUrl + '/api/collections/users/records/' + gameUserId, {
-    headers: { Authorization: 'Bearer ' + gameToken }
-  })
+  fetch('/api/pb/collections/users/records/' + gameUserId)
   .then(r => r.json())
-  .then(u => fetch(pbUrl + '/api/collections/users/records/' + gameUserId, {
+  .then(u => fetch('/api/pb/collections/users/records/' + gameUserId, {
     method:  'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + gameToken },
+    headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ points: (u.points ?? 0) + pts }),
   }))
   .catch(() => {});

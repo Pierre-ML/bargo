@@ -8,7 +8,6 @@ import warningIcon   from '../assets/icon/warning.svg';
 import arrowLeftIcon   from '../assets/icon/arrow_left_lg.svg';
 import creditCardIcon  from '../assets/icon/credit_card.svg';
 import lockIcon        from '../assets/icon/lock.svg';
-import { PB_URL } from '../../backend/backend.js';
 
 const planId = Astro.url.searchParams.get('plan') ?? 'vip';
 const token  = Astro.cookies.get('pb_token')?.value ?? null;
@@ -311,7 +310,9 @@ const plan = plans[planId] ?? plans.vip;
 
 </Layout>
 
-<script is:inline define:vars={{ PB_URL, token, userId, planPbValue, planId }}>
+<script is:inline define:vars={{ userId, planPbValue, planId }}>
+  // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+  // vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
   document.getElementById('demo-close').addEventListener('click', function () {
     document.getElementById('demo-overlay').style.display = 'none';
   });
@@ -340,11 +341,11 @@ const plan = plans[planId] ?? plans.vip;
 
   async function updateAbonnement() {
     var newPlan = planPbValue[planId];
-    if (!newPlan || !token || !userId) return;
+    if (!newPlan || !userId) return;
     try {
-      await fetch(PB_URL + '/api/collections/users/records/' + userId, {
+      await fetch('/api/pb/collections/users/records/' + userId, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ abonnements: newPlan }),
       });
     } catch (_) {}

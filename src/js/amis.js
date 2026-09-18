@@ -2,18 +2,18 @@
 // Système d'amis — modal recherche + demandes entrantes (profil)
 
 (function () {
+  // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+  // vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
   var fd = document.getElementById('friend-data');
   if (!fd) return;
   var d        = JSON.parse(fd.textContent);
   var allUsers = d.allUsers;
   var amiesIds = d.amiesIds.slice();
   var userId   = d.userId;
-  var TOKEN    = d.token;
-  var PB_URL   = d.PB_URL;
   var sentRequests = [];
 
   function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-  function imgUrl(rec, file) { return file ? PB_URL + '/api/files/' + rec.collectionName + '/' + rec.id + '/' + file : null; }
+  function imgUrl(rec, file) { return file ? '/pb-files/' + rec.collectionName + '/' + rec.id + '/' + file : null; }
   function avatarHtml(user) {
     var url = imgUrl(user, user.avatar);
     if (url) return '<img src="' + url + '" alt="' + esc(user.pseudo) + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />';
@@ -54,9 +54,9 @@
 
   async function sendFriendRequest(recipientId) {
     try {
-      var res = await fetch(PB_URL + '/api/collections/users/records/' + recipientId, {
+      var res = await fetch('/api/pb/collections/users/records/' + recipientId, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 'demande_amies+': [userId] }),
       });
       if (res.ok) {
@@ -91,14 +91,14 @@
     btn.addEventListener('click', async function () {
       btn.disabled = true;
       try {
-        await fetch(PB_URL + '/api/collections/users/records/' + userId, {
+        await fetch('/api/pb/collections/users/records/' + userId, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 'amies+': [friendId], 'demande_amies-': [friendId] }),
         });
-        await fetch(PB_URL + '/api/collections/users/records/' + friendId, {
+        await fetch('/api/pb/collections/users/records/' + friendId, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 'amies+': [userId] }),
         });
         amiesIds.push(friendId);
@@ -117,9 +117,9 @@
     btn.addEventListener('click', async function () {
       btn.disabled = true;
       try {
-        await fetch(PB_URL + '/api/collections/users/records/' + userId, {
+        await fetch('/api/pb/collections/users/records/' + userId, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 'demande_amies-': [friendId] }),
         });
         item.remove();
@@ -139,15 +139,15 @@
       btn.disabled = true;
       try {
         // Retirer de demande_session
-        await fetch(PB_URL + '/api/collections/users/records/' + userId, {
+        await fetch('/api/pb/collections/users/records/' + userId, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 'demande_session-': [sessionId] }),
         });
         // Ajouter l'utilisateur dans id_menbre de la session
-        await fetch(PB_URL + '/api/collections/session_barathon/records/' + sessionId, {
+        await fetch('/api/pb/collections/session_barathon/records/' + sessionId, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 'id_menbre+': [userId] }),
         });
         window.location.href = href;
@@ -163,9 +163,9 @@
     btn.addEventListener('click', async function () {
       btn.disabled = true;
       try {
-        await fetch(PB_URL + '/api/collections/users/records/' + userId, {
+        await fetch('/api/pb/collections/users/records/' + userId, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 'demande_session-': [sessionId] }),
         });
         item.remove();

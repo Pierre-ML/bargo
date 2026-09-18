@@ -1,7 +1,6 @@
 ---
 // @ts-nocheck
 // Page callback OAuth2 — sans Layout pour éviter les interférences
-const PB_URL = 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr';
 
 // Déjà connecté → profil
 const tok = Astro.cookies.get('pb_token')?.value;
@@ -57,7 +56,8 @@ if (tok && uid) return Astro.redirect('/profil');
   <p class="err" id="err"></p>
   <a href="/connexion" id="retry" style="display:none">Réessayer</a>
 
-  <script is:inline define:vars={{ PB_URL }}>
+  <script>
+    // @ts-nocheck
     (async function () {
       var params       = new URLSearchParams(window.location.search);
       var code         = params.get('code')  || '';
@@ -83,39 +83,22 @@ if (tok && uid) return Astro.redirect('/profil');
       }
 
       try {
-        var res = await fetch(PB_URL + '/api/collections/users/auth-with-oauth2', {
+        // L'échange du code se fait côté serveur : /api/oauth/callback pose
+        // directement les cookies httpOnly, sans jamais renvoyer le token au JS.
+        var res = await fetch('/api/oauth/callback', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            provider:     'google',
-            code:         code,
-            codeVerifier: codeVerifier,
-            redirectUrl:  redirectUrl,
-            createData:   { abonnements: 'Gratuit' },
-          }),
+          body:    JSON.stringify({ code: code, codeVerifier: codeVerifier, redirectUrl: redirectUrl }),
         });
 
         var data = await res.json();
 
-        if (!res.ok) {
-          fail('Erreur ' + res.status + ' — ' + (data.message || 'inconnu') + (data.data ? ' | ' + JSON.stringify(data.data) : ''));
+        if (!res.ok || !data.redirect) {
+          fail('Erreur ' + res.status + ' — ' + (data.error || 'inconnu') + (data.data ? ' | ' + JSON.stringify(data.data) : ''));
           return;
         }
 
-        var token    = data.token;
-        var recordId = data.record && data.record.id;
-        var pseudo   = data.record && data.record.pseudo;
-
-        if (!token || !recordId) {
-          fail('Réponse invalide du serveur.');
-          return;
-        }
-
-        var maxAge = 60 * 60 * 24 * 7;
-        document.cookie = 'pb_token='   + token    + '; path=/; max-age=' + maxAge + '; SameSite=Lax';
-        document.cookie = 'pb_user_id=' + recordId + '; path=/; max-age=' + maxAge + '; SameSite=Lax';
-
-        window.location.href = pseudo ? '/profil' : '/bienvenue';
+        window.location.href = data.redirect;
 
       } catch (e) {
         fail('Erreur réseau : ' + e.message);

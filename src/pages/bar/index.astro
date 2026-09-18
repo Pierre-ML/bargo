@@ -1,12 +1,11 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import PbImage from '../../components/PbImage.astro';
-import { getCollection } from '../../../backend/backend.js';
+import { getCollection, PB_URL } from '../../../backend/backend.js';
 import LikeButton from '../../components/LikeButton.astro';
 
 const bars = await getCollection('bar', { sort: 'nom', perPage: 200 });
 
-const PB_URL = 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr';
 const token  = Astro.cookies.get('pb_token')?.value;
 const userId = Astro.cookies.get('pb_user_id')?.value;
 const isAuth = !!(token && userId);
@@ -96,7 +95,7 @@ if (isAuth) {
     </div>
   </section>
 
-  {isAuth && <div id="auth-meta" data-token={token} data-user-id={userId} hidden></div>}
+  {isAuth && <div id="auth-meta" data-user-id={userId} hidden></div>}
 
   <script>
     import '../../js/like.js';

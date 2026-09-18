@@ -2,9 +2,9 @@
 // Logique de la page admin
 
 (function () {
+  // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+  // vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
   var d            = JSON.parse(document.getElementById('page-data').textContent);
-  var PB_URL       = d.PB_URL;
-  var TOKEN        = d.token;
   var allBars      = d.allBars;
   var allBoisons   = d.allBoisons;
   var allJeux      = d.allJeux;
@@ -145,7 +145,7 @@
     document.getElementById('drawer-error').style.display = 'none';
 
     var imgPreview = bar && bar.img
-      ? '<img src="' + PB_URL + '/api/files/' + bar.collectionName + '/' + bar.id + '/' + bar.img
+      ? '<img src="' + '/pb-files/' + bar.collectionName + '/' + bar.id + '/' + bar.img
         + '" style="width:100%; height:140px; object-fit:cover; border-radius:8px; margin-bottom:8px; display:block;" />'
       : '';
 
@@ -189,7 +189,7 @@
     document.getElementById('drawer-error').style.display = 'none';
 
     var imgPreview = boison && boison.img
-      ? '<img src="' + PB_URL + '/api/files/' + boison.collectionName + '/' + boison.id + '/' + boison.img
+      ? '<img src="' + '/pb-files/' + boison.collectionName + '/' + boison.id + '/' + boison.img
         + '" style="width:100%; height:140px; object-fit:cover; border-radius:8px; margin-bottom:8px; display:block;" />'
       : '';
 
@@ -272,8 +272,8 @@
     if (imgFile) fd.append('img', imgFile);
 
     var res = await fetch(
-      PB_URL + '/api/collections/bar/records' + (editingId ? '/' + editingId : ''),
-      { method: editingId ? 'PATCH' : 'POST', headers: { Authorization: 'Bearer ' + TOKEN }, body: fd }
+      '/api/pb/collections/bar/records' + (editingId ? '/' + editingId : ''),
+      { method: editingId ? 'PATCH' : 'POST', body: fd }
     );
     if (!res.ok) throw new Error((await res.json()).message || 'Erreur PocketBase.');
   }
@@ -288,8 +288,8 @@
     if (imgFile) fd.append('img', imgFile);
 
     var res = await fetch(
-      PB_URL + '/api/collections/boison/records' + (editingId ? '/' + editingId : ''),
-      { method: editingId ? 'PATCH' : 'POST', headers: { Authorization: 'Bearer ' + TOKEN }, body: fd }
+      '/api/pb/collections/boison/records' + (editingId ? '/' + editingId : ''),
+      { method: editingId ? 'PATCH' : 'POST', body: fd }
     );
     if (!res.ok) throw new Error((await res.json()).message || 'Erreur PocketBase.');
   }
@@ -321,7 +321,7 @@
     var imgFieldName = type === 'theme' ? 'type_them' : 'type_decoration_avatar';
     var existingImg  = item ? (type === 'theme' ? item.type_them : item.type_decoration_avatar) : null;
     var preview = existingImg
-      ? '<img src="' + PB_URL + '/api/files/' + item.collectionName + '/' + item.id + '/' + existingImg + '" style="width:100%; height:120px; object-fit:cover; border-radius:8px; margin-bottom:8px; display:block;" />'
+      ? '<img src="' + '/pb-files/' + item.collectionName + '/' + item.id + '/' + existingImg + '" style="width:100%; height:120px; object-fit:cover; border-radius:8px; margin-bottom:8px; display:block;" />'
       : '';
     return '<div id="f-conditional" style="' + S.group + '">' +
       '<label style="' + S.label + '">' + label + (item && existingImg ? ' (remplacer)' : ' *') + '</label>' +
@@ -387,16 +387,16 @@
     }
 
     var res = await fetch(
-      PB_URL + '/api/collections/boutique/records' + (editingId ? '/' + editingId : ''),
-      { method: editingId ? 'PATCH' : 'POST', headers: { Authorization: 'Bearer ' + TOKEN }, body: fd }
+      '/api/pb/collections/boutique/records' + (editingId ? '/' + editingId : ''),
+      { method: editingId ? 'PATCH' : 'POST', body: fd }
     );
     if (!res.ok) throw new Error((await res.json()).message || 'Erreur PocketBase.');
   }
 
   // ── Delete helpers ────────────────────────────────────────────────────────
   async function deleteRecord(collection, id, rowAttr) {
-    var res = await fetch(PB_URL + '/api/collections/' + collection + '/records/' + id, {
-      method: 'DELETE', headers: { Authorization: 'Bearer ' + TOKEN },
+    var res = await fetch('/api/pb/collections/' + collection + '/records/' + id, {
+      method: 'DELETE',
     });
     if (res.ok) {
       var row = document.querySelector('[' + rowAttr + '="' + id + '"]');
@@ -407,9 +407,9 @@
   // ── Toggle admin ──────────────────────────────────────────────────────────
   async function toggleAdmin(id, currentAdmin, btn) {
     var newVal = !currentAdmin;
-    var res = await fetch(PB_URL + '/api/collections/users/records/' + id, {
+    var res = await fetch('/api/pb/collections/users/records/' + id, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ admin: newVal }),
     });
     if (res.ok) {
@@ -432,7 +432,7 @@
     document.getElementById('drawer-error').style.display = 'none';
 
     var imgPreview = jeu.img
-      ? '<img src="' + PB_URL + '/api/files/' + jeu.collectionName + '/' + jeu.id + '/' + jeu.img
+      ? '<img src="' + '/pb-files/' + jeu.collectionName + '/' + jeu.id + '/' + jeu.img
         + '" style="width:100%; height:140px; object-fit:cover; border-radius:8px; margin-bottom:8px; display:block;" />'
       : '';
 
@@ -457,8 +457,8 @@
     fd.append('description', val('description'));
     var imgFile = fileVal('img');
     if (imgFile) fd.append('img', imgFile);
-    var res = await fetch(PB_URL + '/api/collections/jeux/records/' + editingId,
-      { method: 'PATCH', headers: { Authorization: 'Bearer ' + TOKEN }, body: fd });
+    var res = await fetch('/api/pb/collections/jeux/records/' + editingId,
+      { method: 'PATCH', body: fd });
     if (!res.ok) throw new Error((await res.json()).message || 'Erreur PocketBase.');
     var updated = await res.json();
     // Update local cache
@@ -548,9 +548,9 @@
 
     if (!question || !c1 || !c2 || !c3 || !c4) throw new Error('Tous les champs sont obligatoires.');
 
-    var res = await fetch(PB_URL + '/api/collections/jeux_questionaire/records/' + editingId, {
+    var res = await fetch('/api/pb/collections/jeux_questionaire/records/' + editingId, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         question: question,
         choix_1: c1, choix_2: c2, choix_3: c3, choix_4: c4,
@@ -609,8 +609,8 @@
   }
 
   async function deleteQuestion(id) {
-    var res = await fetch(PB_URL + '/api/collections/jeux_questionaire/records/' + id, {
-      method: 'DELETE', headers: { Authorization: 'Bearer ' + TOKEN },
+    var res = await fetch('/api/pb/collections/jeux_questionaire/records/' + id, {
+      method: 'DELETE',
     });
     if (res.ok) {
       allQuestions = allQuestions.filter(function (q) { return q.id !== id; });
@@ -646,9 +646,9 @@
         reponse_1: rep === 1, reponse_2: rep === 2, reponse_3: rep === 3, reponse_4: rep === 4,
         theme: theme,
       };
-      var res = await fetch(PB_URL + '/api/collections/jeux_questionaire/records', {
+      var res = await fetch('/api/pb/collections/jeux_questionaire/records', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error((await res.json()).message || 'Erreur.');

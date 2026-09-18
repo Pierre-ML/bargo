@@ -648,7 +648,9 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
 
 </Layout>
 
-<script is:inline define:vars={{ pbUrl: PB_URL, pbToken: token, pbUserId: userId, targetUserId: id, activeTab }}>
+<script is:inline define:vars={{ pbUserId: userId, targetUserId: id, activeTab }}>
+  // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+  // vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
   function moveIndicator(btn) {
     var indicator = document.getElementById('tab-indicator');
     var list      = document.getElementById('tab-list');
@@ -676,17 +678,15 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
     if (!btn) return;
     btn.disabled = true; btn.style.opacity = '0.6';
     try {
-      var r = await fetch(pbUrl + '/api/collections/users/records/' + targetUserId, {
-        headers: { Authorization: 'Bearer ' + pbToken }
-      });
+      var r = await fetch('/api/pb/collections/users/records/' + targetUserId);
       if (r.ok) {
         var target = await r.json();
         var existing = Array.isArray(target.demande_amies) ? target.demande_amies : [];
         if (existing.indexOf(pbUserId) < 0) {
           existing.push(pbUserId);
-          await fetch(pbUrl + '/api/collections/users/records/' + targetUserId, {
+          await fetch('/api/pb/collections/users/records/' + targetUserId, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + pbToken },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ demande_amies: existing }),
           });
         }
@@ -707,31 +707,27 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
     if (!btn) return;
     btn.disabled = true; btn.style.opacity = '0.6';
     try {
-      var meRes = await fetch(pbUrl + '/api/collections/users/records/' + pbUserId, {
-        headers: { Authorization: 'Bearer ' + pbToken }
-      });
+      var meRes = await fetch('/api/pb/collections/users/records/' + pbUserId);
       if (meRes.ok) {
         var me = await meRes.json();
         var myAmies = Array.isArray(me.amies) ? me.amies : [];
         var myDemandes = Array.isArray(me.demande_amies) ? me.demande_amies : [];
         if (myAmies.indexOf(targetUserId) < 0) myAmies.push(targetUserId);
         myDemandes = myDemandes.filter(function (i) { return i !== targetUserId; });
-        await fetch(pbUrl + '/api/collections/users/records/' + pbUserId, {
+        await fetch('/api/pb/collections/users/records/' + pbUserId, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + pbToken },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ amies: myAmies, demande_amies: myDemandes }),
         });
       }
-      var theirRes = await fetch(pbUrl + '/api/collections/users/records/' + targetUserId, {
-        headers: { Authorization: 'Bearer ' + pbToken }
-      });
+      var theirRes = await fetch('/api/pb/collections/users/records/' + targetUserId);
       if (theirRes.ok) {
         var them = await theirRes.json();
         var theirAmies = Array.isArray(them.amies) ? them.amies : [];
         if (theirAmies.indexOf(pbUserId) < 0) theirAmies.push(pbUserId);
-        await fetch(pbUrl + '/api/collections/users/records/' + targetUserId, {
+        await fetch('/api/pb/collections/users/records/' + targetUserId, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + pbToken },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ amies: theirAmies }),
         });
       }
@@ -748,16 +744,14 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
     if (!btn) return;
     btn.disabled = true;
     try {
-      var meRes = await fetch(pbUrl + '/api/collections/users/records/' + pbUserId, {
-        headers: { Authorization: 'Bearer ' + pbToken }
-      });
+      var meRes = await fetch('/api/pb/collections/users/records/' + pbUserId);
       if (meRes.ok) {
         var me = await meRes.json();
         var myDemandes = Array.isArray(me.demande_amies) ? me.demande_amies : [];
         myDemandes = myDemandes.filter(function (i) { return i !== targetUserId; });
-        await fetch(pbUrl + '/api/collections/users/records/' + pbUserId, {
+        await fetch('/api/pb/collections/users/records/' + pbUserId, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + pbToken },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ demande_amies: myDemandes }),
         });
       }
@@ -774,27 +768,23 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
     if (!btn) return;
     btn.disabled = true; btn.style.opacity = '0.6';
     try {
-      var meRes = await fetch(pbUrl + '/api/collections/users/records/' + pbUserId, {
-        headers: { Authorization: 'Bearer ' + pbToken }
-      });
+      var meRes = await fetch('/api/pb/collections/users/records/' + pbUserId);
       if (meRes.ok) {
         var me = await meRes.json();
         var myAmies = (Array.isArray(me.amies) ? me.amies : []).filter(function (i) { return i !== targetUserId; });
-        await fetch(pbUrl + '/api/collections/users/records/' + pbUserId, {
+        await fetch('/api/pb/collections/users/records/' + pbUserId, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + pbToken },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ amies: myAmies }),
         });
       }
-      var theirRes = await fetch(pbUrl + '/api/collections/users/records/' + targetUserId, {
-        headers: { Authorization: 'Bearer ' + pbToken }
-      });
+      var theirRes = await fetch('/api/pb/collections/users/records/' + targetUserId);
       if (theirRes.ok) {
         var them = await theirRes.json();
         var theirAmies = (Array.isArray(them.amies) ? them.amies : []).filter(function (i) { return i !== pbUserId; });
-        await fetch(pbUrl + '/api/collections/users/records/' + targetUserId, {
+        await fetch('/api/pb/collections/users/records/' + targetUserId, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + pbToken },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ amies: theirAmies }),
         });
       }

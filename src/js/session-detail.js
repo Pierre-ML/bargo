@@ -1,11 +1,11 @@
 // @ts-nocheck
 // Logique complète de la page session/[id]
+// Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+// vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
 
 (function () {
   var d        = JSON.parse(document.getElementById('page-data').textContent);
   var session  = d.session;
-  var PB_URL   = d.PB_URL;
-  var TOKEN    = d.token;
 
   var isEnCours   = d.isEnCours;
   var barActuel   = d.barActuel;
@@ -33,7 +33,7 @@
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
   function imgUrl(rec, file) {
-    return file ? PB_URL + '/api/files/' + rec.collectionName + '/' + rec.id + '/' + file : null;
+    return file ? '/pb-files/' + rec.collectionName + '/' + rec.id + '/' + file : null;
   }
   function thumb(url, alt) {
     if (!url) return '<div style="width:100%;height:100%;background:#3a3a3a;border-radius:3px;"></div>';
@@ -254,8 +254,8 @@
     var btn = document.getElementById('delete-modal-confirm');
     btn.disabled = true; btn.textContent = 'Suppression…';
     try {
-      await fetch(PB_URL + '/api/collections/session_barathon/records/' + session.id, {
-        method: 'DELETE', headers: { Authorization: 'Bearer ' + TOKEN }
+      await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
+        method: 'DELETE'
       });
     } catch (_) {}
     window.location.href = '/session';
@@ -277,9 +277,9 @@
           dtArriver = date + ' ' + heure_fin + ':00';
         }
       }
-      await fetch(PB_URL + '/api/collections/session_barathon/records/' + session.id, {
+      await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nom: nom, date_heur_depart: dtDepart, date_heur_arriver: dtArriver, description: description, automatique: !!automatique }),
       });
     } catch (_) {}
@@ -301,9 +301,9 @@
     var btn = document.getElementById('btn-launch-session');
     if (btn) { btn.disabled = true; btn.textContent = 'Lancement…'; }
     try {
-      await fetch(PB_URL + '/api/collections/session_barathon/records/' + session.id, {
+      await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ etat_session: 'en_cours' }),
       });
     } catch (_) {}
@@ -316,9 +316,9 @@
   async function passerProchainBar() {
     barActuel = Math.min(barActuel + 1, bars.length - 1);
     try {
-      await fetch(PB_URL + '/api/collections/session_barathon/records/' + session.id, {
+      await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bar_actuel: barActuel }),
       });
     } catch (_) {}
@@ -330,9 +330,9 @@
     var btn = document.getElementById('stop-modal-confirm');
     btn.disabled = true; btn.textContent = 'Arrêt…';
     try {
-      await fetch(PB_URL + '/api/collections/session_barathon/records/' + session.id, {
+      await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ etat_session: 'fini' }),
       });
     } catch (_) {}
@@ -346,14 +346,14 @@
     var totalBonus   = baseBonus;
     if (baseBonus > 0) {
       try {
-        var userRes  = await fetch(PB_URL + '/api/collections/users/records/' + d.userId, { headers: { Authorization: 'Bearer ' + TOKEN } });
+        var userRes  = await fetch('/api/pb/collections/users/records/' + d.userId);
         var userData = await userRes.json();
         abonnements  = userData.abonnements ?? 'Gratuit';
         multiplier   = abonnements === 'Premium' ? 5 : abonnements === 'VIP' ? 2 : 1;
         totalBonus   = baseBonus * multiplier;
-        await fetch(PB_URL + '/api/collections/users/records/' + d.userId, {
+        await fetch('/api/pb/collections/users/records/' + d.userId, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ points: (userData.points ?? 0) + totalBonus }),
         });
       } catch (_) {}
@@ -361,7 +361,7 @@
     var memberPoints = [];
     for (var i = 0; i < amis.length; i++) {
       try {
-        var r = await fetch(PB_URL + '/api/collections/users/records/' + amis[i].id, { headers: { Authorization: 'Bearer ' + TOKEN } });
+        var r = await fetch('/api/pb/collections/users/records/' + amis[i].id);
         var u = await r.json();
         memberPoints.push({ ami: amis[i], points: u.points ?? 0 });
       } catch (_) { memberPoints.push({ ami: amis[i], points: 0 }); }
@@ -518,26 +518,24 @@
   }
   async function inviteUser(targetUserId, asSam) {
     try {
-      var uRes = await fetch(PB_URL + '/api/collections/users/records/' + targetUserId, {
-        headers: { Authorization: 'Bearer ' + TOKEN },
-      });
+      var uRes = await fetch('/api/pb/collections/users/records/' + targetUserId);
       if (uRes.ok) {
         var uData    = await uRes.json();
         var existing = Array.isArray(uData.demande_session) ? uData.demande_session : [];
         if (existing.indexOf(session.id) < 0) {
           existing.push(session.id);
-          await fetch(PB_URL + '/api/collections/users/records/' + targetUserId, {
+          await fetch('/api/pb/collections/users/records/' + targetUserId, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ demande_session: existing }),
           });
         }
       }
       // Si marqué SAM, l'ajouter directement dans id_sam de la session
       if (asSam) {
-        await fetch(PB_URL + '/api/collections/session_barathon/records/' + session.id, {
+        await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 'id_sam+': [targetUserId] }),
         });
         if (samIds.indexOf(targetUserId) < 0) samIds.push(targetUserId);
@@ -546,9 +544,9 @@
   }
   async function patchSession() {
     try {
-      await fetch(PB_URL + '/api/collections/session_barathon/records/' + session.id, {
+      await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id_bar:    bars.map(function (b) { return b.id; }),
           id_jeux:   jeux.length > 0 ? jeux[0].id : null,
@@ -562,9 +560,9 @@
   async function toggleSam(amiId) {
     var isSamNow = samIds.indexOf(amiId) >= 0;
     try {
-      await fetch(PB_URL + '/api/collections/session_barathon/records/' + session.id, {
+      await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+        headers: { 'Content-Type': 'application/json' },
         body: isSamNow
           ? JSON.stringify({ 'id_sam-': [amiId] })
           : JSON.stringify({ 'id_sam+': [amiId] }),
@@ -679,9 +677,9 @@
       if (!isEnCours && session.date_heur_depart) {
         var dtDepart = new Date(session.date_heur_depart.replace(' ', 'T'));
         if (!isNaN(dtDepart.getTime()) && now >= dtDepart) {
-          fetch(PB_URL + '/api/collections/session_barathon/records/' + session.id, {
+          fetch('/api/pb/collections/session_barathon/records/' + session.id, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ etat_session: 'en_cours' }),
           }).then(function () {
             isEnCours = true;
@@ -693,9 +691,9 @@
       } else if (isEnCours && session.date_heur_arriver) {
         var dtArriver = new Date(session.date_heur_arriver.replace(' ', 'T'));
         if (!isNaN(dtArriver.getTime()) && now >= dtArriver) {
-          fetch(PB_URL + '/api/collections/session_barathon/records/' + session.id, {
+          fetch('/api/pb/collections/session_barathon/records/' + session.id, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ etat_session: 'fini' }),
           }).then(function () {
             window.location.href = '/session';

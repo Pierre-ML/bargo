@@ -1167,11 +1167,11 @@ const displayName = user.prenom
     </div>
   </div>
 
-  <script id="friend-data" type="application/json" set:html={JSON.stringify({ allUsers, amiesIds, userId, token, PB_URL })}></script>
+  <script id="friend-data" type="application/json" set:html={JSON.stringify({ allUsers, amiesIds, userId })}></script>
 
-  <div id="auth-meta" data-token={token} data-user-id={userId} hidden></div>
+  <div id="auth-meta" data-user-id={userId} hidden></div>
 
-  <script is:inline define:vars={{ activeTab, PB_URL: 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr', token, userId, decoRecord, titreRecord, themeRecord }}>
+  <script is:inline define:vars={{ activeTab, userId, decoRecord, titreRecord, themeRecord }}>
     // profil.js — onglets + mode édition
     function moveIndicator(btn) {
       var indicator = document.getElementById('tab-indicator');
@@ -1283,13 +1283,13 @@ const displayName = user.prenom
         var itemId   = btn.dataset.itemId;
         var itemType = btn.dataset.itemType;
         var field    = EQUIP_FIELD[itemType];
-        if (!field || !token) return;
+        if (!field || !userId) return;
         btn.disabled = true;
         btn.textContent = '...';
         try {
-          var res = await fetch(PB_URL + '/api/collections/users/records/' + userId, {
+          var res = await fetch('/api/pb/collections/users/records/' + userId, {
             method: 'PATCH',
-            headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ [field]: itemId }),
           });
           if (!res.ok) throw new Error();
@@ -1309,13 +1309,13 @@ const displayName = user.prenom
         var itemId   = btn.dataset.itemId;
         var itemType = btn.dataset.itemType;
         var field    = EQUIP_FIELD[itemType];
-        if (!field || !token) return;
+        if (!field || !userId) return;
         btn.disabled = true;
         btn.textContent = '...';
         try {
-          var res = await fetch(PB_URL + '/api/collections/users/records/' + userId, {
+          var res = await fetch('/api/pb/collections/users/records/' + userId, {
             method: 'PATCH',
-            headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ [field]: '' }),
           });
           if (!res.ok) throw new Error();

@@ -1,7 +1,7 @@
 (function () {
-  var PB_URL = 'https://pbbargo.pierre-mouilleseaux-lhuillier.fr';
+  // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+  // vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
   var authMeta = document.getElementById('auth-meta');
-  var token  = (authMeta && authMeta.dataset.token)  || null;
   var userId = (authMeta && authMeta.dataset.userId) || null;
 
   var favs = { bar_favori: [], jeux_favori: [], items_favori: [] };
@@ -65,14 +65,14 @@
     }
     favs[field] = updated;
 
-    if (!token || !userId) return; // pas connecté : toggle visuel seulement
+    if (!userId) return; // pas connecté : toggle visuel seulement
 
     var body = {};
     body[field] = updated;
 
-    fetch(PB_URL + '/api/collections/users/records/' + userId, {
+    fetch('/api/pb/collections/users/records/' + userId, {
       method:  'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body),
     }).catch(function () {
       // revert on error
@@ -88,10 +88,8 @@
   }
 
   // ── Charge les favoris existants si connecté ───────────────────
-  if (token && userId) {
-    fetch(PB_URL + '/api/collections/users/records/' + userId, {
-      headers: { Authorization: 'Bearer ' + token },
-    })
+  if (userId) {
+    fetch('/api/pb/collections/users/records/' + userId)
     .then(function (r) { return r.ok ? r.json() : {}; })
     .then(function (user) {
       favs.bar_favori   = Array.isArray(user.bar_favori)   ? user.bar_favori   : [];

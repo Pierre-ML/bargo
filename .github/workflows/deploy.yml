@@ -1,0 +1,52 @@
+name: Deploy Bargo
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy on Ubuntu server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            set -e
+
+            echo "======================================"
+            echo "Début du déploiement"
+            echo "======================================"
+
+            cd /var/www/site/bargo
+
+            echo "Mise à jour du code..."
+            git pull origin main
+
+            echo "Installation des dépendances..."
+            npm install
+
+            echo "Compilation Astro..."
+            npm run build
+
+            echo "Redémarrage de l'application..."
+            sudo systemctl restart bargo
+
+            echo "Attente du démarrage..."
+            sleep 3
+
+            echo "Vérification du service..."
+            sudo systemctl is-active --quiet bargo
+
+            echo "Health check..."
+            curl --fail http://127.0.0.1:4324/
+
+            echo "======================================"
+            echo "Déploiement terminé"
+            echo "======================================"

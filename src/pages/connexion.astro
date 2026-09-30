@@ -2,6 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import { Image } from 'astro:assets';
 import { loginUser } from '../../backend/backend.js';
+import { checkRateLimit, resetRateLimit } from '../../backend/rateLimit.js';
 import bgImg       from '../assets/img/fond_connextion_inscription.avif';
 import arrowRightLg from '../assets/icon/arrow_right_lg.svg';
 import '../styles/connexion.css';
@@ -22,18 +23,28 @@ if (Astro.url.searchParams.get('error') === 'oauth') {
 }
 
 if (Astro.request.method === 'POST') {
-  const body = await Astro.request.text();
-  const params = new URLSearchParams(body);
-  const email    = params.get('email') ?? '';
-  const password = params.get('password') ?? '';
+  const clientIp = Astro.request.headers.get('x-forwarded-for')?.split(',')[0].trim() || Astro.clientAddress;
+  const { limited, retryAfter } = checkRateLimit(clientIp);
 
-  const result = await loginUser(email, password);
-  if (result?.token) {
-    Astro.cookies.set('pb_token',   result.token,     { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 * 7, sameSite: 'lax' });
-    Astro.cookies.set('pb_user_id', result.record.id, { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 * 7, sameSite: 'lax' });
-    return Astro.redirect('/profil');
+  if (limited) {
+    Astro.response.status = 429;
+    Astro.response.headers.set('Retry-After', String(retryAfter));
+    error = 'Trop de tentatives de connexion. Réessayez dans quelques minutes.';
+  } else {
+    const body = await Astro.request.text();
+    const params = new URLSearchParams(body);
+    const email    = params.get('email') ?? '';
+    const password = params.get('password') ?? '';
+
+    const result = await loginUser(email, password);
+    if (result?.token) {
+      resetRateLimit(clientIp);
+      Astro.cookies.set('pb_token',   result.token,     { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 * 7, sameSite: 'lax' });
+      Astro.cookies.set('pb_user_id', result.record.id, { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 * 7, sameSite: 'lax' });
+      return Astro.redirect('/profil');
+    }
+    error = 'Email ou mot de passe incorrect.';
   }
-  error = 'Email ou mot de passe incorrect.';
 }
 ---
 

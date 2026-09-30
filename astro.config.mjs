@@ -5,6 +5,7 @@ import node from '@astrojs/node';
 
 // https://astro.build/config
 export default defineConfig({
+  site: 'https://bargo.pierre-mouilleseaux-lhuillier.fr',
   vite: {
     plugins: [tailwindcss()]
   },

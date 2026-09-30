@@ -23,7 +23,10 @@ const {
   noindex = false,
 } = Astro.props;
 
-const url = Astro.url.href;
+// Astro.url.href reflète le Host vu par le process Node derrière le reverse
+// proxy (souvent "localhost" en interne) : on reconstruit l'URL publique à
+// partir de `site` (astro.config.mjs) pour og:url / canonical.
+const url = new URL(Astro.url.pathname + Astro.url.search, Astro.site).href;
 ---
 
 <!doctype html>

@@ -47,8 +47,10 @@ const url = new URL(Astro.url.pathname + Astro.url.search, Astro.site).href;
     <!-- Favicons -->
     <link rel="icon" href="/favicon.svg" sizes="any" />
 
-    <!-- Umami Analytics -->
-    <script is:inline defer src="https://cloud.umami.is/script.js" data-website-id="2add65cc-9e96-4175-a741-e1a4438e1563"></script>
+    <!-- Lutrack (mesure d'audience, production uniquement) -->
+    {import.meta.env.PROD && (
+      <script is:inline defer src="https://stats.pierre-mouilleseaux-lhuillier.fr/tracker.js" data-site="vqlzyex8oj8c2pp"></script>
+    )}
   </head>
 
   <body class="min-h-full m-0 w-full bg-black text-white antialiased">

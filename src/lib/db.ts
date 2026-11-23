@@ -596,18 +596,6 @@ export function listerInvitationsSession(userId: string) {
     .all(userId);
 }
 
-/** Répond à une invitation : supprime l'invitation et, si acceptée, ajoute le membre. false si aucune invitation. */
-export function repondreInvitationSession(userId: string, sessionId: string, accepter: boolean): boolean {
-  return db.transaction(() => {
-    const n = db.prepare('DELETE FROM invitation_session WHERE session_id = ? AND user_id = ?').run(sessionId, userId).changes;
-    if (n === 0) return false;
-    if (accepter) {
-      db.prepare('INSERT OR IGNORE INTO session_membre (session_id, user_id) VALUES (?, ?)').run(sessionId, userId);
-    }
-    return true;
-  })();
-}
-
 /** Favoris publics d'un utilisateur : bars, jeux, boissons (avec image = clé de fichier). */
 export function getFavorisPublics(userId: string) {
   const bars = db
@@ -644,20 +632,6 @@ export function getDateCreationProfil(userId: string): string | null {
 }
 
 // ===== Profil : page Mon profil =====
-
-/** Utilisateurs (hors soi-même) proposés dans la recherche d'amis : champs publics seulement. */
-export function listerUtilisateursPourAmis(userId: string, limite = 200) {
-  return db
-    .prepare(
-      `SELECT user_id AS id, COALESCE(pseudo, '') AS pseudo, COALESCE(prenom, '') AS prenom,
-              COALESCE(nom, '') AS nom, avatar
-       FROM profil
-       WHERE user_id <> ?
-       ORDER BY pseudo
-       LIMIT ?`
-    )
-    .all(userId, limite);
-}
 
 /**
  * Tout ce que la page "Mon profil" affiche : profil, droits, articles équipés
@@ -839,7 +813,14 @@ export function supprimerCompte(userId: string): { supprime: boolean; avatar: st
   if (!colonnesSession.some((c) => c.name === 'bar_actuel')) {
     db.exec('ALTER TABLE session_barathon ADD COLUMN bar_actuel INTEGER NOT NULL DEFAULT 0 CHECK (bar_actuel >= 0)');
   }
+  // demarre_le : instant réel du lancement (anti-abus des points de fin).
+  if (!colonnesSession.some((c) => c.name === 'demarre_le')) {
+    db.exec('ALTER TABLE session_barathon ADD COLUMN demarre_le TEXT');
+  }
 }
+
+/** Durée minimale (minutes) entre lancement et fin pour gagner des points. */
+const DUREE_MIN_POINTS_MIN = 30;
 
 // Points de fin de session : montants FIXES décidés par le serveur.
 const POINTS_PAR_BAR = 5;
@@ -1219,8 +1200,8 @@ export function demarrerSession(sessionId: string, { exigerSam = true } = {}): R
       if (n.n === 0) return { ok: false, erreur: 'Ajoutez au moins un SAM avant de lancer la session.', status: 400 };
     }
     const res = db
-      .prepare(`UPDATE session_barathon SET etat = 'en_cours', bar_actuel = 0, updated = ? WHERE id = ? AND etat = 'pas_commencer'`)
-      .run(maintenant(), sessionId);
+      .prepare(`UPDATE session_barathon SET etat = 'en_cours', bar_actuel = 0, demarre_le = ?, updated = ? WHERE id = ? AND etat = 'pas_commencer'`)
+      .run(maintenant(), maintenant(), sessionId);
     return res.changes > 0 ? { ok: true } : { ok: false, erreur: 'La session ne peut pas être lancée.', status: 409 };
   })();
 }
@@ -1241,6 +1222,7 @@ export function barSuivantSession(sessionId: string): number | null {
 
 export type GainSession = {
   user_id: string; base: number; total: number; abonnement: string; multiplicateur: number; bars_visites: number;
+  points_refuses: boolean;
 };
 
 /**
@@ -1256,7 +1238,10 @@ export function terminerSession(sessionId: string): GainSession[] | null {
       .prepare(`UPDATE session_barathon SET etat = 'fini', updated = ? WHERE id = ? AND etat = 'en_cours'`)
       .run(maintenant(), sessionId);
     if (res.changes === 0) return null;
-    const s: any = db.prepare('SELECT hote_id, bar_actuel FROM session_barathon WHERE id = ?').get(sessionId);
+    const s: any = db.prepare('SELECT hote_id, bar_actuel, demarre_le FROM session_barathon WHERE id = ?').get(sessionId);
+    // Anti-abus : pas de points si la session a duré moins de DUREE_MIN_POINTS_MIN (ou lancement inconnu).
+    const debut = s.demarre_le ? Date.parse(s.demarre_le) : NaN;
+    const pointsRefuses = !(Date.now() - debut >= DUREE_MIN_POINTS_MIN * 60_000);
     const nbBars: number = (db.prepare('SELECT COUNT(*) AS n FROM session_bar WHERE session_id = ?').get(sessionId) as any).n;
     const visites = nbBars === 0 ? 0 : Math.min(s.bar_actuel + 1, nbBars);
     const participants = new Set<string>(
@@ -1268,14 +1253,14 @@ export function terminerSession(sessionId: string): GainSession[] | null {
     );
     const gains: GainSession[] = [];
     for (const userId of participants) {
-      const base =
+      const base = pointsRefuses ? 0 :
         visites * POINTS_PAR_BAR + (sams.has(userId) ? POINTS_BONUS_SAM : 0) + (userId === s.hote_id ? POINTS_BONUS_HOTE : 0);
       const droits: any = db.prepare('SELECT abonnement FROM droits WHERE user_id = ?').get(userId);
       const abonnement: string = droits?.abonnement ?? 'Gratuit';
       const multiplicateur = MULTIPLICATEUR_ABONNEMENT[abonnement] ?? 1;
       const total = base * multiplicateur;
       if (total > 0) ajouterPoints(userId, total);
-      gains.push({ user_id: userId, base, total, abonnement, multiplicateur, bars_visites: visites });
+      gains.push({ user_id: userId, base, total, abonnement, multiplicateur, bars_visites: visites, points_refuses: pointsRefuses });
     }
     return gains;
   })();

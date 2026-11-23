@@ -348,7 +348,7 @@
     var memberPoints = (r.data.classement || []).map(function (u) { return { ami: u, points: u.points || 0 }; });
     document.getElementById('stop-modal').style.display = 'none';
     var abonnLabel = r.data.abonnement && r.data.abonnement !== 'Gratuit' ? r.data.abonnement : null;
-    showEndScreen(r.data.bars_visites || 0, r.data.base || 0, r.data.total || 0, memberPoints, abonnLabel, r.data.multiplicateur || 1);
+    showEndScreen(r.data.bars_visites || 0, r.data.base || 0, r.data.total || 0, memberPoints, abonnLabel, r.data.multiplicateur || 1, r.data.points_refuses ? (r.data.message || 'Session trop courte : aucun point attribué.') : null);
   }
   function showStopError(msg) {
     var btn = document.getElementById('stop-modal-confirm');
@@ -356,7 +356,7 @@
     setTimeout(function () { btn.textContent = 'Oui, arrêter'; }, 3000);
   }
 
-  function showEndScreen(barsVisites, baseBonus, totalBonus, memberPoints, abonnLabel, multiplier) {
+  function showEndScreen(barsVisites, baseBonus, totalBonus, memberPoints, abonnLabel, multiplier, messageRefus) {
     var bonusHtml =
       '<div style="background:#252525;border-radius:5px;padding:20px 24px;margin-bottom:28px;">' +
         '<p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#72c073;margin:0 0 16px;">Vos bonus de fin de session</p>' +
@@ -381,6 +381,12 @@
       }).join('');
     }
     document.getElementById('end-bonus-card').innerHTML   = bonusHtml;
+    if (messageRefus) {
+      var note = document.createElement('p');
+      note.textContent = messageRefus;
+      note.style.cssText = 'color:#f7f1ed;font-size:14px;font-weight:500;margin:0 0 16px;';
+      document.getElementById('end-bonus-card').prepend(note);
+    }
     document.getElementById('end-members-list').innerHTML = membersHtml;
     document.getElementById('end-screen').style.display   = 'block';
   }

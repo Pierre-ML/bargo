@@ -259,6 +259,7 @@ CREATE TABLE IF NOT EXISTS session_barathon (
   hote_id      TEXT REFERENCES "user"(id) ON DELETE CASCADE,
   jeu_id       TEXT REFERENCES jeu(id) ON DELETE SET NULL,
   bar_actuel   INTEGER NOT NULL DEFAULT 0 CHECK (bar_actuel >= 0),
+  demarre_le   TEXT,
   created TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );

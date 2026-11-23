@@ -2,6 +2,7 @@
 // Les points sont attribués côté serveur (une seule fois, dans la même transaction).
 // Réponse : { base, total, abonnement, multiplicateur, bars_visites,
 //             classement: [{ id, pseudo, prenom, nom, avatar, points }] }
+// + points_refuses: true et message si la session a duré moins de 30 min (0 point).
 // (base / total = gain de l'appelant)
 import { json, erreur } from '../../../../lib/api.js';
 import { chargerSession } from '../../../../lib/sessionApi.js';
@@ -21,6 +22,7 @@ export async function POST(ctx) {
     abonnement: moi?.abonnement ?? 'Gratuit',
     multiplicateur: moi?.multiplicateur ?? 1,
     bars_visites: moi?.bars_visites ?? 0,
+    ...(moi?.points_refuses ? { points_refuses: true, message: 'Session trop courte : aucun point attribué (30 minutes minimum).' } : {}),
     classement: classementSession(id),
   });
 }

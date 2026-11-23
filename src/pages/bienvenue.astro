@@ -2,7 +2,7 @@
 // @ts-nocheck
 import Layout from '../layouts/Layout.astro';
 import { Image } from 'astro:assets';
-import { PB_URL, getCollectionAuth } from '../../backend/backend.js';
+import { listerUtilisateursPourAmis } from '../lib/db.ts';
 import checkIcon from '../assets/icon/check.svg';
 import userIcon     from '../assets/icon/user.svg';
 import downloadIcon  from '../assets/icon/download.svg';
@@ -16,14 +16,13 @@ import discordIcon  from '../assets/icon/discord.svg';
 import searchIcon   from '../assets/icon/search.svg';
 import '../styles/bienvenue.css';
 
-const token  = Astro.cookies.get('pb_token')?.value;
-const userId = Astro.cookies.get('pb_user_id')?.value;
-if (!token || !userId) return Astro.redirect('/connexion');
+if (!Astro.locals.user) {
+  return Astro.redirect('/connexion?redirect=' + encodeURIComponent(Astro.url.pathname));
+}
+const userId = Astro.locals.user.id;
 
-const usersRaw = await getCollectionAuth('users', token, { perPage: 200, sort: 'pseudo' });
-const allUsers = usersRaw
-  .filter(u => u.id !== userId)
-  .map(u => ({ id: u.id, collectionName: u.collectionName, pseudo: u.pseudo ?? '', prenom: u.prenom ?? '', nom: u.nom ?? '', avatar: u.avatar ?? null }));
+// Champs publics uniquement (id, pseudo, prenom, nom, avatar), soi-même exclu
+const allUsers = listerUtilisateursPourAmis(userId);
 ---
 
 <Layout title="Bienvenue sur Bargo" noFooter={true}>
@@ -232,7 +231,7 @@ const allUsers = usersRaw
               <span style="font-size:16px; font-weight:700; color:white;">Facebook</span>
             </div>
             <div style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); height:61px; display:flex; align-items:center; padding:0 20px;">
-              <input id="f-facbook" type="text" placeholder="Nom Facebook"
+              <input id="f-facebook" type="text" placeholder="Nom Facebook"
                 style="background:transparent; width:100%; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e;"
                 class="placeholder-neutral-500" />
             </div>
@@ -309,9 +308,8 @@ const allUsers = usersRaw
 
 </Layout>
 
-<script is:inline define:vars={{ pbUserId: userId, allUsers }}>
-  // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
-  // vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
+<script is:inline define:vars={{ allUsers }}>
+  // Appels vers /api/... : le cookie de session httpOnly est envoyé automatiquement.
   var TOTAL        = 4;
   var cur          = 1;
   var selectedAmis = [];
@@ -397,7 +395,7 @@ const allUsers = usersRaw
   // ── API ──────────────────────────────────────────────────
   async function patchUser(data) {
     try {
-      await fetch('/api/pb/collections/users/records/' + pbUserId, {
+      await fetch('/api/profil', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -410,8 +408,8 @@ const allUsers = usersRaw
     try {
       var fd = new FormData();
       fd.append('avatar', avatarFile);
-      await fetch('/api/pb/collections/users/records/' + pbUserId, {
-        method: 'PATCH',
+      await fetch('/api/profil/avatar', {
+        method: 'POST',
         body: fd,
       });
     } catch (_) {}
@@ -424,7 +422,7 @@ const allUsers = usersRaw
       var d = {};
       var prenom = ($('f-prenom') ? $('f-prenom').value : '').trim(); if (prenom) d.prenom = prenom;
       var nom    = ($('f-nom')    ? $('f-nom').value    : '').trim(); if (nom)    d.nom    = nom;
-      var age    = parseInt(($('f-age') ? $('f-age').value : '0')) || null; if (age && age >= 18) d.age = age;
+      var age    = parseInt(($('f-age') ? $('f-age').value : '0')) || null; if (age && age >= 18 && age <= 120) d.age = age;
       var ville  = ($('f-ville')  ? $('f-ville').value  : '').trim(); if (ville)  d.ville  = ville;
       if (Object.keys(d).length) await patchUser(d);
     }
@@ -432,7 +430,7 @@ const allUsers = usersRaw
       var d2 = {};
       var desc    = ($('f-description') ? $('f-description').value : '').trim(); if (desc)    d2.description = desc;
       var insta   = ($('f-insta')       ? $('f-insta').value       : '').trim(); if (insta)   d2.insta       = insta;
-      var facbook = ($('f-facbook')     ? $('f-facbook').value     : '').trim(); if (facbook) d2.facbook     = facbook;
+      var facebook = ($('f-facebook') ? $('f-facebook').value : '').trim(); if (facebook) d2.facebook = facebook;
       var discord = ($('f-discord')     ? $('f-discord').value     : '').trim(); if (discord) d2.discord     = discord;
       if (Object.keys(d2).length) await patchUser(d2);
     }
@@ -441,20 +439,11 @@ const allUsers = usersRaw
       for (var i = 0; i < selectedAmis.length; i++) {
         var targetId = selectedAmis[i];
         try {
-          // Récupérer les demandes existantes de l'utilisateur cible
-          var r = await fetch('/api/pb/collections/users/records/' + targetId);
-          if (r.ok) {
-            var targetUser = await r.json();
-            var existing   = Array.isArray(targetUser.demande_amies) ? targetUser.demande_amies : [];
-            if (existing.indexOf(pbUserId) < 0) {
-              existing.push(pbUserId);
-              await fetch('/api/pb/collections/users/records/' + targetId, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ demande_amies: existing }),
-              });
-            }
-          }
+          await fetch('/api/amis/demande', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ami_id: targetId }),
+          });
         } catch (_) {}
       }
       window.location.href = '/profil';
@@ -470,7 +459,7 @@ const allUsers = usersRaw
 
   // ── Amis ─────────────────────────────────────────────────
   function imgUrl(u) {
-    return u.avatar ? '/pb-files/' + u.collectionName + '/' + u.id + '/' + u.avatar : null;
+    return u.avatar ? '/fichiers/' + u.avatar : null;
   }
 
   function av(u, size) {

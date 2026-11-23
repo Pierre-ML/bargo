@@ -1,7 +1,7 @@
 // @ts-nocheck
 // Logique complète de la page session/[id]
-// Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
-// vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
+// Toutes les actions passent par /api/sessions/{id}/... (cookie de session
+// httpOnly, droits vérifiés côté serveur). Aucun token côté client.
 
 (function () {
   var d        = JSON.parse(document.getElementById('page-data').textContent);
@@ -13,6 +13,8 @@
   var isHote      = d.isHote;
   var isHoteOrSam = isHote || isSam;
   var samIds      = d.samIds;
+  var isMembre    = d.isMembre;
+  var invitesIds  = (d.invitesIds || []).slice();
 
   var bars     = d.bars.slice();
   var jeux     = d.jeux.slice();
@@ -33,7 +35,7 @@
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
   function imgUrl(rec, file) {
-    return file ? '/pb-files/' + rec.collectionName + '/' + rec.id + '/' + file : null;
+    return file ? '/fichiers/' + file : null;
   }
   function thumb(url, alt) {
     if (!url) return '<div style="width:100%;height:100%;background:#3a3a3a;border-radius:3px;"></div>';
@@ -68,7 +70,7 @@
       '<textarea id="' + id + '" rows="3" style="width:100%;background:#2c2c2c;border:1px solid rgba(255,255,255,0.15);border-radius:3px;padding:7px 12px;color:white;font-size:14px;font-weight:500;outline:none;resize:none;box-sizing:border-box;">' + esc(value) + '</textarea></div>';
   }
   function bigBarCard(bar, isCurrent) {
-    var url    = imgUrl(bar, bar.img);
+    var url    = imgUrl(bar, bar.image);
     var border = isCurrent ? 'border:2px solid #72c073;' : 'border:2px solid rgba(255,255,255,0.08);';
     return '<div style="background:#2c2c2c;border-radius:5px;overflow:hidden;' + border + '">' +
       '<div style="width:100%;height:120px;overflow:hidden;">' +
@@ -146,10 +148,10 @@
     var el = document.getElementById('tab-content');
     if (activeTab === 'bars') {
       if (!bars.length) { el.innerHTML = empty('Aucun bar sélectionné.'); return; }
-      el.innerHTML = bars.map(function (bar) { return card(imgUrl(bar, bar.img), bar.nom, bar.adresse); }).join('');
+      el.innerHTML = bars.map(function (bar) { return card(imgUrl(bar, bar.image), bar.nom, bar.adresse); }).join('');
     } else if (activeTab === 'jeux') {
       if (!jeux.length) { el.innerHTML = empty('Aucun jeu sélectionné.'); return; }
-      el.innerHTML = jeux.map(function (jeu) { return card(imgUrl(jeu, jeu.img), jeu.nom, jeu.description); }).join('');
+      el.innerHTML = jeux.map(function (jeu) { return card(imgUrl(jeu, jeu.image), jeu.nom, jeu.description); }).join('');
     } else if (activeTab === 'amis') {
       if (!amis.length) { el.innerHTML = empty('Aucun ami invité.'); return; }
       el.innerHTML = amis.map(function (ami) { return amiCard(ami, ami.sam); }).join('');
@@ -162,9 +164,11 @@
           param('Heure de fin',    session.heure_fin || '—') +
           param('Lancement auto',  session.automatique ? '✓ Activé' : 'Désactivé') +
           (session.description ? param('Description', session.description) : '') +
+          (isMembre && !isHote ? '<div style="margin-top:20px;"><button id="btn-quit-session" style="width:100%;height:42px;background:transparent;border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:500;border-radius:5px;cursor:pointer;">Quitter la session</button></div>' : '') +
           (isHote ? '<div style="margin-top:8px;"><button id="btn-delete-session" style="background:#ef4444;border:none;color:white;font-size:13px;font-weight:500;height:36px;padding:0 18px;border-radius:3px;cursor:pointer;">Supprimer la session</button></div>' : '') +
         '</div>';
         if (isHote) document.getElementById('btn-delete-session')?.addEventListener('click', deleteSession);
+        document.getElementById('btn-quit-session')?.addEventListener('click', quitterSession);
       } else {
         el.innerHTML = '<div style="display:flex;flex-direction:column;gap:14px;">' +
           editParam('Nom',             'p-nom',       'text', session.nom || '') +
@@ -207,7 +211,7 @@
     } else if (activeTab === 'jeux') {
       if (!jeux.length) { el.innerHTML = empty('Aucun jeu sélectionné.'); return; }
       el.innerHTML = jeux.map(function (jeu) {
-        var url  = imgUrl(jeu, jeu.img);
+        var url  = imgUrl(jeu, jeu.image);
         var href = jeu.type_du_jeux === 'questionaire' ? '/jeux_questionaire?session=' + session.id : '/jeux';
         return '<div style="display:flex;align-items:center;gap:14px;background:#2c2c2c;border-radius:5px;padding:12px;margin-bottom:10px;">' +
           '<div style="width:50px;height:50px;flex-shrink:0;border-radius:3px;overflow:hidden;">' + thumb(url, jeu.nom) + '</div>' +
@@ -237,8 +241,10 @@
         param('Heure de fin',    session.heure_fin || '—') +
         param('Lancement auto',  session.automatique ? '✓ Activé' : 'Désactivé') +
         (session.description ? param('Description', session.description) : '') +
+        (isMembre && !isHote ? '<div style="margin-top:20px;"><button id="btn-quit-session" style="width:100%;height:42px;background:transparent;border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:500;border-radius:5px;cursor:pointer;">Quitter la session</button></div>' : '') +
         (isHote ? '<div style="margin-top:20px;"><button id="btn-stop-session" style="width:100%;height:46px;background:#ef4444;border:none;color:white;font-size:14px;font-weight:700;border-radius:5px;cursor:pointer;letter-spacing:0.3px;">⏹ Arrêter la session</button></div>' : '') +
       '</div>';
+      document.getElementById('btn-quit-session')?.addEventListener('click', quitterSession);
       document.getElementById('btn-stop-session')?.addEventListener('click', function () {
         document.getElementById('stop-modal').style.display = 'flex';
       });
@@ -246,6 +252,23 @@
   }
 
   // ── Session API calls ─────────────────────────────────────────────
+  // Tout passe par /api/sessions/{id}/... : l'utilisateur est identifié par
+  // son cookie de session (httpOnly), le serveur vérifie les droits.
+  var API = '/api/sessions/' + encodeURIComponent(session.id);
+  async function appel(method, url, body) {
+    try {
+      var res  = await fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      var data = await res.json().catch(function () { return {}; });
+      return { ok: res.ok, status: res.status, data: data };
+    } catch (_) {
+      return { ok: false, status: 0, data: {} };
+    }
+  }
+
   function deleteSession() {
     document.getElementById('delete-modal').style.display = 'flex';
   }
@@ -253,60 +276,52 @@
   async function confirmDeleteSession() {
     var btn = document.getElementById('delete-modal-confirm');
     btn.disabled = true; btn.textContent = 'Suppression…';
-    try {
-      await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
-        method: 'DELETE'
-      });
-    } catch (_) {}
+    await appel('DELETE', API);
     window.location.href = '/session';
   }
 
+  async function quitterSession() {
+    if (!window.confirm('Quitter cette session ?')) return;
+    var r = await appel('POST', API + '/quitter');
+    if (r.ok) window.location.href = '/session';
+  }
+
   async function patchSessionParams(nom, date, heure_debut, heure_fin, description, automatique) {
-    try {
-      var dtDepart = (date && heure_debut) ? date + ' ' + heure_debut + ':00' : null;
-      var dtArriver = null;
-      if (date && heure_fin) {
-        var toMin = function(t) { var p = (t || '').split(':'); return parseInt(p[0] || 0) * 60 + parseInt(p[1] || 0); };
-        var finDay = (heure_debut && toMin(heure_fin) < toMin(heure_debut)) ? 1 : 0;
-        if (finDay) {
-          var d = new Date(date + 'T00:00:00');
-          d.setDate(d.getDate() + 1);
-          var dd = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-          dtArriver = dd + ' ' + heure_fin + ':00';
-        } else {
-          dtArriver = date + ' ' + heure_fin + ':00';
-        }
+    var dtDepart = (date && heure_debut) ? date + ' ' + heure_debut + ':00' : null;
+    var dtArriver = null;
+    if (date && heure_fin) {
+      var toMin = function(t) { var p = (t || '').split(':'); return parseInt(p[0] || 0) * 60 + parseInt(p[1] || 0); };
+      var finDay = (heure_debut && toMin(heure_fin) < toMin(heure_debut)) ? 1 : 0;
+      if (finDay) {
+        var d = new Date(date + 'T00:00:00');
+        d.setDate(d.getDate() + 1);
+        var dd = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        dtArriver = dd + ' ' + heure_fin + ':00';
+      } else {
+        dtArriver = date + ' ' + heure_fin + ':00';
       }
-      await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nom: nom, date_heur_depart: dtDepart, date_heur_arriver: dtArriver, description: description, automatique: !!automatique }),
-      });
-    } catch (_) {}
+    }
+    var r = await appel('PATCH', API, { nom: nom, date_depart: dtDepart, date_arrivee: dtArriver, description: description, automatique: !!automatique });
+    // Refusé par le serveur : on recharge pour réafficher les vraies valeurs
+    if (!r.ok) window.location.reload();
   }
 
   async function lancerSession() {
-    if (samIds.length === 0) {
-      var btn = document.getElementById('btn-launch-session');
-      if (btn) {
-        btn.textContent = '⚠ Ajoutez au moins un SAM';
-        btn.style.background = '#ef4444';
-        setTimeout(function () {
-          btn.textContent = '▶ Lancer la session';
-          btn.style.background = '#347645';
-        }, 3000);
-      }
-      return;
-    }
     var btn = document.getElementById('btn-launch-session');
+    function avertir(msg) {
+      if (!btn) return;
+      btn.disabled = false;
+      btn.textContent = msg;
+      btn.style.background = '#ef4444';
+      setTimeout(function () {
+        btn.textContent = '▶ Lancer la session';
+        btn.style.background = '#347645';
+      }, 3000);
+    }
+    if (samIds.length === 0) { avertir('⚠ Ajoutez au moins un SAM'); return; }
     if (btn) { btn.disabled = true; btn.textContent = 'Lancement…'; }
-    try {
-      await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ etat_session: 'en_cours' }),
-      });
-    } catch (_) {}
+    var r = await appel('POST', API + '/demarrer');
+    if (!r.ok) { avertir('⚠ ' + (r.data.error || 'Lancement impossible')); return; }
     isEnCours = true;
     var bottomBar = document.getElementById('bottom-bar');
     if (bottomBar) bottomBar.style.display = 'none';
@@ -314,14 +329,8 @@
   }
 
   async function passerProchainBar() {
-    barActuel = Math.min(barActuel + 1, bars.length - 1);
-    try {
-      await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bar_actuel: barActuel }),
-      });
-    } catch (_) {}
+    var r = await appel('POST', API + '/bar-suivant');
+    if (r.ok && typeof r.data.bar_actuel === 'number') barActuel = r.data.bar_actuel;
     renderTab();
     refreshMapMarkers();
   }
@@ -329,54 +338,29 @@
   async function confirmStopSession() {
     var btn = document.getElementById('stop-modal-confirm');
     btn.disabled = true; btn.textContent = 'Arrêt…';
-    try {
-      await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ etat_session: 'fini' }),
-      });
-    } catch (_) {}
-    var barsVisited  = barActuel + 1;
-    var barsBonus    = barsVisited * 5;
-    var samBonus     = isSam  ? 50 : 0;
-    var hoteBonus    = isHote ? 30 : 0;
-    var baseBonus    = barsBonus + samBonus + hoteBonus;
-    var abonnements  = 'Gratuit';
-    var multiplier   = 1;
-    var totalBonus   = baseBonus;
-    if (baseBonus > 0) {
-      try {
-        var userRes  = await fetch('/api/pb/collections/users/records/' + d.userId);
-        var userData = await userRes.json();
-        abonnements  = userData.abonnements ?? 'Gratuit';
-        multiplier   = abonnements === 'Premium' ? 5 : abonnements === 'VIP' ? 2 : 1;
-        totalBonus   = baseBonus * multiplier;
-        await fetch('/api/pb/collections/users/records/' + d.userId, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ points: (userData.points ?? 0) + totalBonus }),
-        });
-      } catch (_) {}
+    // Les points sont calculés et attribués par le serveur (montants fixes)
+    var r = await appel('POST', API + '/terminer');
+    if (!r.ok) {
+      btn.disabled = false; btn.textContent = 'Oui, arrêter';
+      showStopError(r.data.error || 'Impossible d\'arrêter la session.');
+      return;
     }
-    var memberPoints = [];
-    for (var i = 0; i < amis.length; i++) {
-      try {
-        var r = await fetch('/api/pb/collections/users/records/' + amis[i].id);
-        var u = await r.json();
-        memberPoints.push({ ami: amis[i], points: u.points ?? 0 });
-      } catch (_) { memberPoints.push({ ami: amis[i], points: 0 }); }
-    }
-    memberPoints.sort(function(a, b) { return b.points - a.points; });
+    var memberPoints = (r.data.classement || []).map(function (u) { return { ami: u, points: u.points || 0 }; });
     document.getElementById('stop-modal').style.display = 'none';
-    var abonnLabel = abonnements !== 'Gratuit' ? abonnements : null;
-    showEndScreen(baseBonus, totalBonus, memberPoints, abonnLabel, multiplier);
+    var abonnLabel = r.data.abonnement && r.data.abonnement !== 'Gratuit' ? r.data.abonnement : null;
+    showEndScreen(r.data.bars_visites || 0, r.data.base || 0, r.data.total || 0, memberPoints, abonnLabel, r.data.multiplicateur || 1);
+  }
+  function showStopError(msg) {
+    var btn = document.getElementById('stop-modal-confirm');
+    btn.textContent = msg;
+    setTimeout(function () { btn.textContent = 'Oui, arrêter'; }, 3000);
   }
 
-  function showEndScreen(baseBonus, totalBonus, memberPoints, abonnLabel, multiplier) {
+  function showEndScreen(barsVisites, baseBonus, totalBonus, memberPoints, abonnLabel, multiplier) {
     var bonusHtml =
       '<div style="background:#252525;border-radius:5px;padding:20px 24px;margin-bottom:28px;">' +
         '<p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#72c073;margin:0 0 16px;">Vos bonus de fin de session</p>' +
-        bonusRow('Bars visités (' + (barActuel + 1) + ')', '+' + baseBonus + ' pts') +
+        bonusRow('Bars visités (' + barsVisites + ')', '+' + baseBonus + ' pts') +
         (abonnLabel ? bonusRow('Multiplicateur ' + abonnLabel + ' (×' + multiplier + ')', '×' + multiplier) : '') +
         '<div style="height:1px;background:rgba(255,255,255,0.1);margin:14px 0;"></div>' +
         '<div style="display:flex;justify-content:space-between;align-items:center;">' +
@@ -391,8 +375,8 @@
         return '<div style="display:flex;align-items:center;gap:12px;background:#2c2c2c;border-radius:5px;padding:12px;margin-bottom:8px;">' +
           '<span style="color:rgba(247,241,237,0.35);font-size:12px;font-weight:700;width:20px;text-align:center;flex-shrink:0;">' + (i + 1) + '</span>' +
           '<div style="width:36px;height:36px;flex-shrink:0;border-radius:50%;overflow:hidden;">' + avatarHtml(mp.ami, 36) + '</div>' +
-          '<p style="color:white;font-size:14px;font-weight:500;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(mp.ami.pseudo || (mp.ami.prenom + ' ' + mp.ami.nom).trim() || 'Utilisateur') + '</p>' +
-          '<p style="color:#72c073;font-size:15px;font-weight:700;margin:0;flex-shrink:0;">' + mp.points + ' pts</p>' +
+          '<p style="color:white;font-size:14px;font-weight:500;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(mp.ami.pseudo || ((mp.ami.prenom || '') + ' ' + (mp.ami.nom || '')).trim() || 'Utilisateur') + '</p>' +
+          '<p style="color:#72c073;font-size:15px;font-weight:700;margin:0;flex-shrink:0;">' + esc(mp.points) + ' pts</p>' +
         '</div>';
       }).join('');
     }
@@ -404,7 +388,7 @@
   // ── Modal ─────────────────────────────────────────────────────────
   function openModal(mode) {
     modalMode = mode;
-    if (mode === 'amis') pendingInvites = [];
+    if (mode === 'amis') pendingInvites = invitesIds.map(function (id) { return { id: id, sam: samIds.indexOf(id) >= 0 }; });
     var titles = { bars: 'Ajouter des bars', jeux: 'Ajouter des jeux', amis: 'Ajouter des amis' };
     document.getElementById('modal-title').textContent = titles[mode] || 'Ajouter';
     document.getElementById('modal-search').value      = '';
@@ -448,7 +432,7 @@
           var id = btn.dataset.id;
           if (amis.some(function (a) { return a.id === id; })) {
             amis = amis.filter(function (a) { return a.id !== id; });
-            patchSession();
+            removeMember(id);
           } else if (!pendingInvites.some(function (p) { return p.id === id; })) {
             var isSamVal = pendingInvites.some(function (p) { return p.id === id && p.sam; });
             pendingInvites.push({ id: id, sam: isSamVal });
@@ -463,6 +447,7 @@
           var p  = pendingInvites.find(function (p) { return p.id === id; });
           if (p) {
             p.sam = !p.sam;
+            setSam(id, p.sam);
           } else {
             pendingInvites.push({ id: id, sam: true });
             inviteUser(id, true);
@@ -486,7 +471,7 @@
       var s    = selFn(item.id);
       var name = esc(item.nom || 'Item');
       var sub  = esc(item.adresse || item.description || '');
-      var thumbEl = '<div style="width:50px;height:50px;flex-shrink:0;border-radius:3px;overflow:hidden;">' + thumb(imgUrl(item, item.img), name) + '</div>';
+      var thumbEl = '<div style="width:50px;height:50px;flex-shrink:0;border-radius:3px;overflow:hidden;">' + thumb(imgUrl(item, item.image), name) + '</div>';
       return '<div style="display:flex;align-items:center;gap:14px;background:#2c2c2c;border-radius:5px;padding:12px;margin-bottom:8px;">' +
         thumbEl +
         '<div style="flex:1;min-width:0;"><p style="color:white;font-size:14px;font-weight:500;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + name + '</p>' +
@@ -507,74 +492,52 @@
       var idx = bars.findIndex(function (b) { return b.id === id; });
       if (idx >= 0) bars.splice(idx, 1);
       else { var b = allBars.find(function (b) { return b.id === id; }); if (b) bars.push(b); }
-      patchSession();
+      patchBars();
       refreshMapMarkers();
     } else if (modalMode === 'jeux') {
+      // un seul jeu par session
       var idx = jeux.findIndex(function (j) { return j.id === id; });
       if (idx >= 0) jeux.splice(idx, 1);
       else { var j = allJeux.find(function (j) { return j.id === id; }); if (j) jeux.push(j); }
-      patchSession();
+      patchJeu();
     }
   }
   async function inviteUser(targetUserId, asSam) {
-    try {
-      var uRes = await fetch('/api/pb/collections/users/records/' + targetUserId);
-      if (uRes.ok) {
-        var uData    = await uRes.json();
-        var existing = Array.isArray(uData.demande_session) ? uData.demande_session : [];
-        if (existing.indexOf(session.id) < 0) {
-          existing.push(session.id);
-          await fetch('/api/pb/collections/users/records/' + targetUserId, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ demande_session: existing }),
-          });
-        }
-      }
-      // Si marqué SAM, l'ajouter directement dans id_sam de la session
-      if (asSam) {
-        await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 'id_sam+': [targetUserId] }),
-        });
-        if (samIds.indexOf(targetUserId) < 0) samIds.push(targetUserId);
-      }
-    } catch (_) {}
+    var r = await appel('POST', API + '/invitations', { user_id: targetUserId, sam: !!asSam });
+    if (!r.ok) {
+      pendingInvites = pendingInvites.filter(function (p) { return p.id !== targetUserId; });
+      renderModal(document.getElementById('modal-search').value);
+      return;
+    }
+    if (invitesIds.indexOf(targetUserId) < 0) invitesIds.push(targetUserId);
+    if (asSam && samIds.indexOf(targetUserId) < 0) samIds.push(targetUserId);
   }
-  async function patchSession() {
-    try {
-      await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id_bar:    bars.map(function (b) { return b.id; }),
-          id_jeux:   jeux.length > 0 ? jeux[0].id : null,
-          id_menbre: amis.map(function (a) { return a.id; }),
-          id_sam:    amis.filter(function (a) { return a.sam; }).map(function (a) { return a.id; }),
-        }),
-      });
-    } catch (_) {}
+  async function removeMember(userId) {
+    var r = await appel('DELETE', API + '/participants/' + encodeURIComponent(userId));
+    if (!r.ok) { window.location.reload(); return; }
+    samIds = samIds.filter(function (id) { return id !== userId; });
+  }
+  async function setSam(userId, value) {
+    var r = await appel('POST', API + '/sam', { user_id: userId, sam: value });
+    if (!r.ok) return false;
+    if (value && samIds.indexOf(userId) < 0) samIds.push(userId);
+    if (!value) samIds = samIds.filter(function (id) { return id !== userId; });
+    return true;
+  }
+  async function patchBars() {
+    var r = await appel('PUT', API + '/bars', { bars: bars.map(function (b) { return b.id; }) });
+    if (!r.ok) window.location.reload();
+  }
+  async function patchJeu() {
+    var r = await appel('PUT', API + '/jeu', { jeu_id: jeux.length > 0 ? jeux[0].id : null });
+    if (!r.ok) window.location.reload();
   }
 
   async function toggleSam(amiId) {
     var isSamNow = samIds.indexOf(amiId) >= 0;
-    try {
-      await fetch('/api/pb/collections/session_barathon/records/' + session.id, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: isSamNow
-          ? JSON.stringify({ 'id_sam-': [amiId] })
-          : JSON.stringify({ 'id_sam+': [amiId] }),
-      });
-      if (isSamNow) {
-        samIds = samIds.filter(function (id) { return id !== amiId; });
-      } else {
-        samIds.push(amiId);
-      }
-      amis = amis.map(function (a) { return Object.assign({}, a, { sam: samIds.indexOf(a.id) >= 0 }); });
-      renderTab();
-    } catch (_) {}
+    if (!(await setSam(amiId, !isSamNow))) return;
+    amis = amis.map(function (a) { return Object.assign({}, a, { sam: samIds.indexOf(a.id) >= 0 }); });
+    renderTab();
   }
 
   // ── Carte Leaflet ─────────────────────────────────────────────────
@@ -670,38 +633,20 @@
   document.getElementById('stop-modal-cancel')?.addEventListener('click', function () { document.getElementById('stop-modal').style.display = 'none'; });
   document.getElementById('stop-modal')?.addEventListener('click', function (e) { if (e.target === this) this.style.display = 'none'; });
 
-  // ── Auto-transition client-side (vérification toutes les 30s) ───
-  if (session.automatique) {
-    setInterval(function () {
-      var now = new Date();
-      if (!isEnCours && session.date_heur_depart) {
-        var dtDepart = new Date(session.date_heur_depart.replace(' ', 'T'));
-        if (!isNaN(dtDepart.getTime()) && now >= dtDepart) {
-          fetch('/api/pb/collections/session_barathon/records/' + session.id, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ etat_session: 'en_cours' }),
-          }).then(function () {
-            isEnCours = true;
-            var bottomBar = document.getElementById('bottom-bar');
-            if (bottomBar) bottomBar.style.display = 'none';
-            renderTab();
-          }).catch(function () {});
-        }
-      } else if (isEnCours && session.date_heur_arriver) {
-        var dtArriver = new Date(session.date_heur_arriver.replace(' ', 'T'));
-        if (!isNaN(dtArriver.getTime()) && now >= dtArriver) {
-          fetch('/api/pb/collections/session_barathon/records/' + session.id, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ etat_session: 'fini' }),
-          }).then(function () {
-            window.location.href = '/session';
-          }).catch(function () {});
-        }
+  // ── Lancement / fin automatiques (le serveur décide d'après les dates) ───
+  setInterval(function () {
+    if (!session.automatique) return;
+    appel('POST', API + '/auto').then(function (r) {
+      if (!r.ok) return;
+      if (r.data.etat === 'fini') { window.location.href = '/session'; return; }
+      if (r.data.etat === 'en_cours' && !isEnCours) {
+        isEnCours = true;
+        var bottomBar = document.getElementById('bottom-bar');
+        if (bottomBar) bottomBar.style.display = 'none';
+        renderTab();
       }
-    }, 30000);
-  }
+    });
+  }, 30000);
 
   // ── Init ─────────────────────────────────────────────────────────
   renderTab();

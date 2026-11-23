@@ -1,48 +1,32 @@
 ---
 // @ts-nocheck
 import Layout from '../../layouts/Layout.astro';
-import PbImage from '../../components/PbImage.astro';
+import ImageFichier from '../../components/ImageFichier.astro';
 import HeroSection from '../../components/HeroSection.astro';
 import { Image } from 'astro:assets';
-import { PB_URL } from '../../../backend/backend.js';
+import { listerSessionsUtilisateur, decouperDateSession } from '../../lib/db.ts';
 import homeIcon       from '../../assets/icon/home.svg';
 import usersGroupIcon  from '../../assets/icon/users_group.svg';
 import chevronRightIcon from '../../assets/icon/chevron_right.svg';
 import checkIcon        from '../../assets/icon/check.svg';
 import arrowLeftIcon    from '../../assets/icon/arrow_left_lg.svg';
 
-const token  = Astro.cookies.get('pb_token')?.value;
-const userId = Astro.cookies.get('pb_user_id')?.value;
-if (!token || !userId) return Astro.redirect('/connexion');
+if (!Astro.locals.user) return Astro.redirect('/connexion?redirect=' + encodeURIComponent(Astro.url.pathname));
+const userId = Astro.locals.user.id;
 
-// Fetch user's active sessions with bars expanded for images
-const filter = encodeURIComponent(`(id_hote='${userId}'||id_menbre~'${userId}')&&etat_session!='fini'`);
-const res = await fetch(
-  `${PB_URL}/api/collections/session_barathon/records?filter=${filter}&sort=-created&perPage=50&expand=id_bar,id_menbre`,
-  { headers: { Authorization: `Bearer ${token}` } }
-);
-const data = res.ok ? await res.json() : { items: [] };
-
-const sessions = (data.items ?? []).map(s => {
-  const barsRaw = s.expand?.id_bar ?? [];
-  const bars    = Array.isArray(barsRaw) ? barsRaw : [barsRaw];
-  const firstBar = bars[0] ?? null;
-  const invites  = s.expand?.id_menbre ?? [];
+// Sessions non terminées dont l'utilisateur est hôte ou membre
+const sessions = listerSessionsUtilisateur(userId).map(s => {
+  const { date, heure } = decouperDateSession(s.date_depart);
   return {
-    id:        s.id,
-    nom:       s.nom ?? 'Session sans nom',
-    date:      s.date_heur_depart?.split(' ')[0] ?? '',
-    heure:     s.date_heur_depart?.split(' ')[1]?.substring(0, 5) ?? '',
-    etat:      s.etat_session ?? 'pas_commencer',
-    isHote:    s.id_hote === userId,
-    barCount:  bars.filter(Boolean).length,
-    memberCount: (Array.isArray(invites) ? invites.length : 0),
-    firstBar:  firstBar ? {
-      id:             firstBar.id,
-      collectionName: firstBar.collectionName,
-      img:            firstBar.img?.[0] ?? null,
-      nom:            firstBar.nom ?? '',
-    } : null,
+    id:          s.id,
+    nom:         s.nom || 'Session sans nom',
+    date,
+    heure,
+    etat:        s.etat ?? 'pas_commencer',
+    isHote:      s.est_hote,
+    barCount:    s.nb_bars,
+    memberCount: s.nb_membres,
+    imageBar:    s.image_bar ?? null,
   };
 });
 ---
@@ -128,10 +112,10 @@ const sessions = (data.items ?? []).map(s => {
 
                     <!-- Image (premier bar ou placeholder) -->
                     <div class="w-28 lg:w-44 shrink-0 overflow-hidden" style="background:#2c2c2c;">
-                      {s.firstBar?.img ? (
-                        <PbImage
-                          record={s.firstBar}
-                          recordImage={s.firstBar.img}
+                      {s.imageBar ? (
+                        <ImageFichier
+                          cle={s.imageBar}
+                          alt=""
                           width={176} height={160}
                           class="w-full h-full object-cover"
                         />

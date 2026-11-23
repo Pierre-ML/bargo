@@ -1,7 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { Image } from 'astro:assets';
-import { getCollection, PB_URL } from '../../../backend/backend.js';
+import { listerBarsPourSession, listerJeuxPourSession, listerAmisPourSession, listerBarsFavorisIds } from '../../lib/db.ts';
 import checkIcon from '../../assets/icon/check.svg';
 import styloIcon    from '../../assets/icon/stylo.svg';
 import calendarIcon from '../../assets/icon/calendar.svg';
@@ -9,53 +9,26 @@ import clockIcon    from '../../assets/icon/clock.svg';
 import docIcon      from '../../assets/icon/doc.svg';
 import searchIcon   from '../../assets/icon/search.svg';
 
-const token  = Astro.cookies.get('pb_token')?.value;
-const userId = Astro.cookies.get('pb_user_id')?.value;
-if (!token || !userId) return Astro.redirect('/connexion');
+if (!Astro.locals.user) return Astro.redirect('/connexion?redirect=' + encodeURIComponent(Astro.url.pathname));
+const userId = Astro.locals.user.id;
 
-const [barsRaw, jeuxRaw, usersRaw] = await Promise.all([
-  getCollection('bar',   { sort: 'nom',    perPage: 200 }),
-  getCollection('jeux',  { sort: 'nom',    perPage: 200 }),
-  getCollection('users', { sort: 'pseudo', perPage: 200 }),
-]);
-
-const bars = barsRaw.map(b => ({
-  id: b.id, collectionName: b.collectionName,
-  nom: b.nom ?? '', adresse: b.adresse ?? '',
-  img: b.img?.[0] ?? null,
-  lat: b.localisation?.lat ?? null, lon: b.localisation?.lon ?? null,
+const bars = listerBarsPourSession().map(b => ({
+  id: b.id, nom: b.nom ?? '', adresse: b.adresse ?? '', image: b.image ?? null,
 }));
 
-const jeux = jeuxRaw.map(j => ({
-  id: j.id, collectionName: j.collectionName,
-  nom: j.nom ?? '', description: j.description ?? '',
-  img: Array.isArray(j.img) ? (j.img[0] ?? null) : (j.img ?? null),
+const jeux = listerJeuxPourSession().map(j => ({
+  id: j.id, nom: j.nom ?? '', description: j.description ?? '', image: j.image ?? null,
 }));
 
-const users = usersRaw
-  .filter(u => u.id !== userId)
-  .map(u => ({
-    id: u.id, collectionName: u.collectionName,
-    pseudo: u.pseudo ?? '', prenom: u.prenom ?? '', nom: u.nom ?? '',
-    avatar: u.avatar ?? null,
-  }));
+// Seuls les amis peuvent être invités
+const amieUsers = listerAmisPourSession(userId).map(u => ({
+  id: u.id, pseudo: u.pseudo ?? '', prenom: u.prenom ?? '', nom: u.nom ?? '', avatar: u.avatar ?? null,
+}));
+const amiesIds  = amieUsers.map(u => u.id);
+const barFavori = listerBarsFavorisIds(userId);
 
-let barFavori = [];
-let amiesIds  = [];
-if (userId && token) {
-  const userRes = await fetch(`${PB_URL}/api/collections/users/records/${userId}`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (userRes.ok) {
-    const user = await userRes.json();
-    barFavori = Array.isArray(user.bar_favori) ? user.bar_favori : [];
-    amiesIds  = Array.isArray(user.amies)      ? user.amies      : [];
-  }
-}
-
-const amieUsers = users.filter(u => amiesIds.includes(u.id));
-
-const appData = JSON.stringify({ bars, jeux, users: amieUsers, userId, barFavori, amiesIds });
+// "<" échappé pour qu'aucune valeur ne puisse fermer la balise <script>
+const appData = JSON.stringify({ bars, jeux, users: amieUsers, userId, barFavori, amiesIds }).replace(/</g, '\\u003c');
 ---
 
 <Layout title="Créer un barathon — Bargo">

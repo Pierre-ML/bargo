@@ -1,6 +1,6 @@
 // @ts-nocheck
-// Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
-// vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
+// Création d'une session : un seul appel POST /api/sessions (l'hôte est
+// l'utilisateur connecté, déterminé par le serveur). Aucun token côté client.
 (function () {
   var d        = JSON.parse(document.getElementById('app-data').textContent);
   var allBars  = d.bars;
@@ -15,7 +15,6 @@
   var selectedAmis       = [];
   var showFavsOnly       = false;
   var amiesIds           = d.amiesIds ? d.amiesIds.slice() : [];
-  var sentFriendRequests = [];
 
   var stepMeta = {
     1: { title: 'Informations<br>de la soiree', progress: 0 },
@@ -29,7 +28,7 @@
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
   function imgUrl(rec, file) {
-    return file ? '/pb-files/' + rec.collectionName + '/' + rec.id + '/' + file : null;
+    return file ? '/fichiers/' + file : null;
   }
   function thumb(url, alt) {
     if (!url) return '<div style="width:100%;height:100%;background:#e7e5e5;border-radius:5px 0 0 5px;"></div>';
@@ -111,7 +110,7 @@
     list.innerHTML = filtered.map(function (bar) {
       var sel = selectedBars.some(function (b) { return b.id === bar.id; });
       return '<div style="display:flex;align-items:center;background:white;border:2px solid #dfdfdf;border-radius:5px;box-shadow:0 4px 4px rgba(0,0,0,0.25);padding:10px;gap:8px;">' +
-        '<div style="width:120px;height:75px;flex-shrink:0;border-radius:5px 0 0 5px;overflow:hidden;">' + thumb(imgUrl(bar, bar.img), bar.nom) + '</div>' +
+        '<div style="width:120px;height:75px;flex-shrink:0;border-radius:5px 0 0 5px;overflow:hidden;">' + thumb(imgUrl(bar, bar.image), bar.nom) + '</div>' +
         '<div style="flex:1;min-width:0;"><p style="color:#000;font-size:16px;font-weight:500;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(bar.nom) + '</p><p style="color:#646262;font-size:14px;font-weight:500;margin:4px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(bar.adresse) + '</p></div>' +
         '<button data-action="toggle-bar" data-id="' + bar.id + '" style="flex-shrink:0;padding:0 12px;height:37px;background:white;border:2px solid ' + (sel ? '#72c073' : '#dfdfdf') + ';border-radius:5px;box-shadow:0 4px 4px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font-size:13px;font-weight:500;color:#1e1e1e;">Ajouter ' + (sel ? iconCheck : iconPlus) + '</button>' +
       '</div>';
@@ -138,7 +137,7 @@
   }
 
   // ── Jeux ──────────────────────────────────────────────────────────
-  // id_jeux est Single dans PocketBase → un seul jeu à la fois
+  // un seul jeu par session
   function renderJeux(q) {
     q = (q || '').toLowerCase();
     var list = document.getElementById('jeux-list');
@@ -146,7 +145,7 @@
     list.innerHTML = filtered.map(function (jeu) {
       var sel = selectedJeux.length > 0 && selectedJeux[0].id === jeu.id;
       return '<div style="display:flex;align-items:center;background:white;border:2px solid #dfdfdf;border-radius:5px;box-shadow:0 4px 4px rgba(0,0,0,0.25);padding:10px;gap:8px;">' +
-        '<div style="width:120px;height:75px;flex-shrink:0;border-radius:5px 0 0 5px;overflow:hidden;">' + thumb(imgUrl(jeu, jeu.img), jeu.nom) + '</div>' +
+        '<div style="width:120px;height:75px;flex-shrink:0;border-radius:5px 0 0 5px;overflow:hidden;">' + thumb(imgUrl(jeu, jeu.image), jeu.nom) + '</div>' +
         '<div style="flex:1;min-width:0;"><p style="color:#000;font-size:16px;font-weight:500;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(jeu.nom) + '</p></div>' +
         '<button data-action="toggle-jeu" data-id="' + jeu.id + '" style="flex-shrink:0;width:141px;height:37px;background:white;border:2px solid ' + (sel ? '#72c073' : '#dfdfdf') + ';border-radius:5px;box-shadow:0 4px 4px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-size:14px;font-weight:500;color:#1e1e1e;">Ajouter ' + (sel ? iconCheck : iconPlus) + '</button>' +
       '</div>';
@@ -184,13 +183,8 @@
       var ami  = selectedAmis.find(function (a) { return a.id === user.id; });
       var sel  = !!ami; var isSam = ami && ami.sam;
       var name = esc(user.pseudo || (user.prenom + ' ' + user.nom).trim() || 'Utilisateur');
-      var isAmi   = amiesIds.indexOf(user.id) >= 0;
-      var isSent  = sentFriendRequests.indexOf(user.id) >= 0;
-      var friendBtn = isAmi
-        ? '<span style="font-size:12px;font-weight:600;color:#72c073;padding:0 8px;">Ami(e)</span>'
-        : isSent
-        ? '<span style="font-size:12px;font-weight:500;color:#646262;padding:0 8px;">Demandé</span>'
-        : '<button data-action="add-friend" data-id="'+user.id+'" style="height:37px;padding:0 14px;font-size:13px;font-weight:500;cursor:pointer;border-radius:5px;background:white;color:#347645;border:2px solid #347645;box-shadow:0 4px 4px rgba(0,0,0,0.25);">+ Ami</button>';
+      // Seuls les amis sont proposés (le serveur refuse toute autre invitation)
+      var friendBtn = '<span style="font-size:12px;font-weight:600;color:#72c073;padding:0 8px;">Ami(e)</span>';
       return '<div style="background:white;border:2px solid #dfdfdf;border-radius:5px;box-shadow:0 4px 4px rgba(0,0,0,0.25);">' +
         // MOBILE
         '<div class="block lg:hidden" style="padding:12px;">' +
@@ -228,9 +222,6 @@
     list.querySelectorAll('[data-action="toggle-sam"]').forEach(function (btn) {
       btn.addEventListener('click', function () { toggleSam(btn.dataset.id); renderUsers(document.getElementById('search-users').value); });
     });
-    list.querySelectorAll('[data-action="add-friend"]').forEach(function (btn) {
-      btn.addEventListener('click', function () { sendFriendRequest(btn.dataset.id); });
-    });
     refreshUsersSummary();
   }
   function refreshUsersSummary() {
@@ -252,21 +243,6 @@
     var ami = selectedAmis.find(function (a) { return a.id === id; });
     if (ami) { ami.sam = !ami.sam; }
     else { var u = allUsers.find(function (u) { return u.id === id; }); if (u) { selectedAmis.push(Object.assign({}, u, { sam: true })); refreshUsersSummary(); } }
-  }
-
-  // ── Friend request ────────────────────────────────────────────────
-  async function sendFriendRequest(recipientId) {
-    try {
-      var res = await fetch('/api/pb/collections/users/records/'+recipientId, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 'demande_amies+': [USER_ID] }),
-      });
-      if (res.ok) {
-        sentFriendRequests.push(recipientId);
-        renderUsers(document.getElementById('search-users').value);
-      }
-    } catch(_) {}
   }
 
   // ── Date/time helpers ─────────────────────────────────────────────
@@ -301,50 +277,28 @@
     var finAddDay = (dateStr && heureDebStr && heureFinStr && toMinutes(heureFinStr) < toMinutes(heureDebStr)) ? 1 : 0;
 
     var payload = {
-      nom:               nom,
-      date_heur_depart:  buildDatetime(dateStr, heureDebStr, 0),
-      date_heur_arriver: buildDatetime(dateStr, heureFinStr, finAddDay),
-      description:  document.getElementById('s1-desc').value        || null,
-      id_hote:      USER_ID,
-      id_bar:       selectedBars.map(function (b) { return b.id; }),
-      id_jeux:      selectedJeux.length > 0 ? selectedJeux[0].id : null,
-      id_menbre:    [],
-      id_sam:       selectedAmis.filter(function (a) { return a.sam; }).map(function (a) { return a.id; }),
-      etat_session: 'pas_commencer',
+      nom:          nom,
+      date_depart:  buildDatetime(dateStr, heureDebStr, 0),
+      date_arrivee: buildDatetime(dateStr, heureFinStr, finAddDay),
+      description:  document.getElementById('s1-desc').value || null,
+      bars:         selectedBars.map(function (b) { return b.id; }),
+      jeu_id:       selectedJeux.length > 0 ? selectedJeux[0].id : null,
+      invites:      selectedAmis.map(function (a) { return a.id; }),
+      sam:          selectedAmis.filter(function (a) { return a.sam; }).map(function (a) { return a.id; }),
       automatique:  false,
     };
 
     try {
-      var res = await fetch('/api/pb/collections/session_barathon/records', {
+      var res = await fetch('/api/sessions', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error('Erreur ' + res.status);
-      var session = await res.json();
-
-      // Envoyer une invitation de session à chaque ami invité
-      for (var i = 0; i < selectedAmis.length; i++) {
-        try {
-          var uRes = await fetch('/api/pb/collections/users/records/' + selectedAmis[i].id);
-          if (uRes.ok) {
-            var uData = await uRes.json();
-            var existing = Array.isArray(uData.demande_session) ? uData.demande_session : [];
-            if (existing.indexOf(session.id) < 0) {
-              existing.push(session.id);
-              await fetch('/api/pb/collections/users/records/' + selectedAmis[i].id, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ demande_session: existing }),
-              });
-            }
-          }
-        } catch(_) {}
-      }
-
+      var session = await res.json().catch(function () { return {}; });
+      if (!res.ok) throw new Error(session.error || ('Erreur ' + res.status));
       window.location.href = '/session/' + session.id;
     } catch (err) {
-      showError('Impossible de créer la session. Vérifiez votre connexion.');
+      showError(err && err.message ? err.message : 'Impossible de créer la session. Vérifiez votre connexion.');
       btn.disabled    = false;
       btn.textContent = 'Lancer 🚀';
     }

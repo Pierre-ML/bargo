@@ -85,6 +85,13 @@ node -e "const d=require('better-sqlite3')('data/bargo.db');console.log(d.prepar
 
 La connexion utilise **better-auth** avec e-mail + mot de passe. La connexion Google et l'e-mail de réinitialisation du mot de passe ont été **retirés volontairement** (pour la durée de vie du site). Les comptes migrés de PocketBase n'ont pas de mot de passe : un admin en définit un **temporaire** depuis le panneau admin (la page affiche le mot de passe une seule fois), puis le transmet à la personne, qui peut ensuite le changer.
 
+**Premier administrateur** : crée un compte sur `/inscription`, puis, sur le serveur :
+
+```bash
+node --env-file=.env scripts/promouvoir-admin.mjs ton-adresse@exemple.fr
+# --retirer pour enlever le statut admin
+```
+
 ### Images
 
 Les images sont des fichiers dans `UPLOAD_DIR`, rangés par clé : `bar/<id>/img-0.webp`, `avatar/<id>/avatar-k3j9x2.webp`, etc. La base ne stocke que cette clé. La route `/fichiers/...` les sert : le catalogue (bar, boisson, jeu, boutique) est public, les avatars sont réservés aux utilisateurs connectés.

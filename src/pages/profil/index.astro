@@ -2,7 +2,7 @@
 // @ts-nocheck
 import Layout from '../../layouts/Layout.astro';
 import { Image } from 'astro:assets';
-import { getMonProfilComplet, listerUtilisateursPourAmis } from '../../lib/db.ts';
+import { getMonProfilComplet } from '../../lib/db.ts';
 import { urlFichier } from '../../lib/stockage.js';
 import ImageFichier from '../../components/ImageFichier.astro';
 import heartIcon    from '../../assets/icon/like.svg';
@@ -51,7 +51,6 @@ const amiesIds     = user.amis.map(a => a.id);
 const amiesExpand  = user.amis;
 
 // Tous les utilisateurs pour le modal ami (exclure soi-même)
-const allUsers = listerUtilisateursPourAmis(userId);
 
 // Items boutique équipés
 const decoRecord    = user.equipes.decoration;
@@ -1035,11 +1034,6 @@ const displayName = user.prenom
       <div id="friend-modal-list" style="overflow-y:auto; flex:1; padding:20px 28px;"></div>
     </div>
   </div>
-
-  <script id="friend-data" type="application/json" set:html={JSON.stringify({
-    allUsers: allUsers.map(u => ({ ...u, avatarUrl: urlFichier(u.avatar) })),
-    amiesIds, userId,
-  }).replace(/</g, '\\u003c')}></script>
 
   <div id="auth-meta" data-user-id={userId} hidden></div>
 

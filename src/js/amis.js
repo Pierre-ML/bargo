@@ -185,7 +185,7 @@
     btn.addEventListener('click', async function () {
       btn.disabled = true;
       try {
-        var res = await post('/api/invitations/repondre', { session_id: sessionId, accepter: true });
+        var res = await post('/api/sessions/' + encodeURIComponent(sessionId) + '/rejoindre', {});
         if (!res.ok) { btn.disabled = false; return; }
         window.location.href = href;
       } catch (_) { btn.disabled = false; }
@@ -199,7 +199,7 @@
     btn.addEventListener('click', async function () {
       btn.disabled = true;
       try {
-        var res = await post('/api/invitations/repondre', { session_id: sessionId, accepter: false });
+        var res = await post('/api/sessions/' + encodeURIComponent(sessionId) + '/refuser', {});
         if (!res.ok) { btn.disabled = false; return; }
         item.remove();
         if (!document.querySelector('.session-invite-item')) {

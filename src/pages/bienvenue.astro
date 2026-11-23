@@ -2,7 +2,6 @@
 // @ts-nocheck
 import Layout from '../layouts/Layout.astro';
 import { Image } from 'astro:assets';
-import { listerUtilisateursPourAmis } from '../lib/db.ts';
 import checkIcon from '../assets/icon/check.svg';
 import userIcon     from '../assets/icon/user.svg';
 import downloadIcon  from '../assets/icon/download.svg';
@@ -19,10 +18,6 @@ import '../styles/bienvenue.css';
 if (!Astro.locals.user) {
   return Astro.redirect('/connexion?redirect=' + encodeURIComponent(Astro.url.pathname));
 }
-const userId = Astro.locals.user.id;
-
-// Champs publics uniquement (id, pseudo, prenom, nom, avatar), soi-même exclu
-const allUsers = listerUtilisateursPourAmis(userId);
 ---
 
 <Layout title="Bienvenue sur Bargo" noFooter={true}>
@@ -308,8 +303,11 @@ const allUsers = listerUtilisateursPourAmis(userId);
 
 </Layout>
 
-<script is:inline define:vars={{ allUsers }}>
+<script is:inline>
   // Appels vers /api/... : le cookie de session httpOnly est envoyé automatiquement.
+  // Les utilisateurs ne sont plus embarqués dans la page : ils viennent de
+  // GET /api/utilisateurs/recherche (pseudo, avatar), mis en cache ici.
+  var allUsers     = [];
   var TOTAL        = 4;
   var cur          = 1;
   var selectedAmis = [];
@@ -459,7 +457,13 @@ const allUsers = listerUtilisateursPourAmis(userId);
 
   // ── Amis ─────────────────────────────────────────────────
   function imgUrl(u) {
-    return u.avatar ? '/fichiers/' + u.avatar : null;
+    return typeof u.avatar === 'string' && u.avatar.indexOf('/fichiers/') === 0 ? u.avatar : null;
+  }
+
+  function memoriser(liste) {
+    liste.forEach(function (u) {
+      if (!allUsers.some(function (x) { return x.id === u.id; })) allUsers.push(u);
+    });
   }
 
   function av(u, size) {
@@ -491,13 +495,39 @@ const allUsers = listerUtilisateursPourAmis(userId);
     });
   }
 
-  function renderList(q) {
+  var derniersResultats = [];
+  var minuterieRecherche = null;
+
+  function rechercher(q) {
+    q = (q || '').trim();
+    clearTimeout(minuterieRecherche);
+    if (q.length < 2) { derniersResultats = []; afficherListe(q); return; }
+    minuterieRecherche = setTimeout(function () {
+      fetch('/api/utilisateurs/recherche?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (data) {
+          var liste = Array.isArray(data) ? data : (data && (data.utilisateurs || data.resultats)) || [];
+          memoriser(liste);
+          derniersResultats = liste.slice(0, 12);
+          afficherListe(q);
+        })
+        .catch(function () { derniersResultats = []; afficherListe(q); });
+    }, 250);
+  }
+
+  function renderList() {
+    var s = $('ami-search');
+    afficherListe(s ? s.value.trim() : '');
+  }
+
+  function afficherListe(q) {
     var el = $('ami-list');
     if (!el) return;
-    q = (q || '').toLowerCase();
-    var filtered = allUsers.filter(function (u) {
-      return !q || (u.pseudo + ' ' + u.prenom + ' ' + u.nom).toLowerCase().includes(q);
-    }).slice(0, 12);
+    if ((q || '').length < 2) {
+      el.innerHTML = '<p style="color:rgba(255,255,255,0.3);font-size:13px;margin:0;">Tape au moins 2 lettres du pseudo.</p>';
+      return;
+    }
+    var filtered = derniersResultats;
 
     el.innerHTML = filtered.map(function (u) {
       var sel = selectedAmis.indexOf(u.id) >= 0;
@@ -520,8 +550,8 @@ const allUsers = listerUtilisateursPourAmis(userId);
   }
 
   var amiSearch = $('ami-search');
-  if (amiSearch) amiSearch.addEventListener('input', function () { renderList(this.value); });
+  if (amiSearch) amiSearch.addEventListener('input', function () { rechercher(this.value); });
 
   showPanel(1);
-  renderList('');
+  renderList();
 </script>

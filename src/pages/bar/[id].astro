@@ -3,7 +3,7 @@
 import Layout from '../../layouts/Layout.astro';
 import { Image } from 'astro:assets';
 import ImageFichier from '../../components/ImageFichier.astro';
-import { getBar } from '../../lib/db.ts';
+import { getBar, estFavori } from '../../lib/db.ts';
 import heartIcon          from '../../assets/icon/heart.svg';
 import bulleMessageIcon   from '../../assets/icon/bulle_de_message.svg';
 import likeFillIcon  from '../../assets/icon/like_fill.svg';
@@ -20,6 +20,7 @@ const isAuth = !!userId;
 const { id } = Astro.params;
 const bar = id ? getBar(id) : null;
 if (!bar) return new Response(null, { status: 404 });
+const liked = isAuth ? estFavori(userId, 'bar', bar.id) : false;
 
 const jours = [
   { label: 'Lundi',    value: bar.horaires_lundi    ?? '' },
@@ -67,8 +68,8 @@ const hasMap = lat !== 0 && lon !== 0;
         <Image src={partageIcon} alt="Partager" width={22} height={22} class="brightness-0 invert" />
         {isAuth && (
           <button class="like-btn-bar p-0 border-0 bg-transparent cursor-pointer" data-id={bar.id} type="button" aria-label="Favori">
-            <Image src={heartIcon}   alt="" width={22} height={22} class="brightness-0 invert like-empty" />
-            <Image src={likeFillIcon} alt="" width={22} height={22} class="hidden like-filled" />
+            <Image src={heartIcon}   alt="" width={22} height={22} class={`brightness-0 invert like-empty ${liked ? 'hidden' : ''}`} />
+            <Image src={likeFillIcon} alt="" width={22} height={22} class={`like-filled ${liked ? '' : 'hidden'}`} />
           </button>
         )}
       </div>
@@ -235,8 +236,8 @@ const hasMap = lat !== 0 && lon !== 0;
     {isAuth && (
       <div class="absolute top-150.5" style="left: calc(91.67% + 10px)">
         <button class="like-btn-bar p-0 border-0 bg-transparent cursor-pointer" data-id={bar.id} type="button" aria-label="Favori">
-          <Image src={heartIcon}    alt="" width={24} height={24} class="like-empty" />
-          <Image src={likeFillIcon} alt="" width={24} height={24} class="hidden like-filled" />
+          <Image src={heartIcon}    alt="" width={24} height={24} class={`like-empty ${liked ? 'hidden' : ''}`} />
+          <Image src={likeFillIcon} alt="" width={24} height={24} class={`like-filled ${liked ? '' : 'hidden'}`} />
         </button>
       </div>
     )}

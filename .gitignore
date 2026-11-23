@@ -30,3 +30,6 @@ pnpm-debug.log*
 .claude/
 CLAUDE.MD
 deploy.js
+# Copie de la base PocketBase de production (données réelles) et base SQLite locale
+copie-pb/
+data/

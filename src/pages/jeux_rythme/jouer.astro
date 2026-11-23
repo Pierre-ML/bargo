@@ -2,12 +2,10 @@
 // @ts-nocheck
 import Layout from '../../layouts/Layout.astro';
 
-const token  = Astro.cookies.get('pb_token')?.value ?? '';
-const userId = Astro.cookies.get('pb_user_id')?.value ?? '';
-if (!token || !userId) return Astro.redirect('/connexion');
+if (!Astro.locals.user) return Astro.redirect('/connexion?redirect=' + encodeURIComponent(Astro.url.pathname + Astro.url.search));
 
 const sessionId  = Astro.url.searchParams.get('session') ?? '';
-const inSession  = !!(sessionId && token && userId);
+const inSession  = !!sessionId;
 const difficulty = Astro.url.searchParams.get('difficulty') ?? 'facile';
 
 const TOTAL_TIME = 40; // secondes
@@ -151,7 +149,6 @@ const cfg = configs[difficulty] ?? configs.facile;
     data-base-pts={String(cfg.basePts)}
     data-total-time={String(TOTAL_TIME)}
     data-session-id={sessionId}
-    data-user-id={userId}
     data-in-session={String(inSession)}
   ></div>
 

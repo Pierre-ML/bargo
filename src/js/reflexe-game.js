@@ -8,7 +8,6 @@ const maxPts     = parseInt(meta.dataset.maxPts);
 const modeBonus  = parseFloat(meta.dataset.modeBonus);
 const totalRounds= parseInt(meta.dataset.totalRounds);
 const sessionId  = meta.dataset.sessionId;
-const gameUserId = meta.dataset.userId;
 const inSession  = meta.dataset.inSession === 'true';
 const difficulty = meta.dataset.difficulty;
 
@@ -171,23 +170,22 @@ function endGame() {
     resultRounds.appendChild(row);
   });
 
-  if (inSession && totalScore > 0 && gameUserId) {
+  if (inSession && totalScore > 0) {
     savePoints(totalScore);
   }
 
   overlay.classList.remove('hidden');
 }
 
-// ── Sauvegarde points (même système que memory-game) ──────────────────────
+// ── Sauvegarde points ──────────────────────────────────────────────────────
+// Le serveur calcule et borne lui-même les points (POST /api/jeux/score) :
+// le score envoyé n'est qu'une indication, jamais cru tel quel.
 function savePoints(pts) {
-  fetch('/api/pb/collections/users/records/' + gameUserId)
-  .then(r => r.json())
-  .then(u => fetch('/api/pb/collections/users/records/' + gameUserId, {
-    method:  'PATCH',
+  fetch('/api/jeux/score', {
+    method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ points: (u.points ?? 0) + pts }),
-  }))
-  .catch(() => {});
+    body:    JSON.stringify({ jeu: 'reflex', score: pts }),
+  }).catch(() => {});
 }
 
 // ── Clic sur le bouton ─────────────────────────────────────────────────────

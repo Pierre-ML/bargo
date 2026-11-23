@@ -2,16 +2,15 @@
 // @ts-nocheck
 import Layout from '../../layouts/Layout.astro';
 import { Image } from 'astro:assets';
-import { getCollection, getImageUrl } from '../../../backend/backend.js';
+import ImageFichier from '../../components/ImageFichier.astro';
+import { listerBoissons } from '../../lib/db.ts';
 import heartFill from '../../assets/icon/like_fill.svg';
 import '../../styles/memory-game.css';
 
-const token  = Astro.cookies.get('pb_token')?.value ?? '';
-const userId = Astro.cookies.get('pb_user_id')?.value ?? '';
-if (!token || !userId) return Astro.redirect('/connexion');
+if (!Astro.locals.user) return Astro.redirect('/connexion?redirect=' + encodeURIComponent(Astro.url.pathname + Astro.url.search));
 
 const sessionId = Astro.url.searchParams.get('session') ?? '';
-const inSession = !!(sessionId && token && userId);
+const inSession = !!sessionId;
 
 let nbCards   = Math.max(4, parseInt(Astro.url.searchParams.get('cards') ?? '16'));
 if (nbCards % 2 !== 0) nbCards++;
@@ -22,7 +21,12 @@ const multiplier = totalTime <= 0 ? 1 : totalTime <= 60 ? 3 : totalTime <= 120 ?
 const ptsPerPair = Math.round(10 * multiplier);
 
 // Fetch boissons
-const boissons = await getCollection('boison', { sort: '@random', perPage: 50 });
+const boissons = listerBoissons();
+for (let i = boissons.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [boissons[i], boissons[j]] = [boissons[j], boissons[i]];
+}
+boissons.length = Math.min(boissons.length, 50);
 
 const nbPairs    = Math.min(Math.floor(nbCards / 2), boissons.length);
 if (nbPairs < 2) return Astro.redirect('/jeux_memoire');
@@ -36,9 +40,8 @@ const selected = boissons.slice(0, nbPairs);
 // Construire le deck : chaque boisson apparaît 2 fois
 const deck = [];
 for (const b of selected) {
-  const imgUrl = b.img ? getImageUrl(b, b.img) : null;
-  deck.push({ boissonId: b.id, nom: b.nom ?? '?', imgUrl });
-  deck.push({ boissonId: b.id, nom: b.nom ?? '?', imgUrl });
+  deck.push({ boissonId: b.id, nom: b.nom ?? '?', image: b.image ?? null });
+  deck.push({ boissonId: b.id, nom: b.nom ?? '?', image: b.image ?? null });
 }
 
 // Mélanger (Fisher-Yates)
@@ -159,8 +162,8 @@ const timeDisplay = totalTime > 0 ? fmtTime(totalTime) : null;
 
                 <!-- Face de la carte -->
                 <div class="memory-card-front rounded-1 overflow-hidden relative bg-zinc-800">
-                  {card.imgUrl ? (
-                    <img src={card.imgUrl} alt={card.nom} class="absolute inset-0 w-full h-full object-cover" />
+                  {card.image ? (
+                    <ImageFichier cle={card.image} alt={card.nom} class="absolute inset-0 w-full h-full object-cover" />
                   ) : (
                     <div class="absolute inset-0 flex items-center justify-center p-3">
                       <p class="text-white text-4 font-bold text-center m-0 leading-snug">{card.nom}</p>
@@ -231,7 +234,6 @@ const timeDisplay = totalTime > 0 ? fmtTime(totalTime) : null;
     data-max-lives={String(maxLives)}
     data-multiplier={String(multiplier)}
     data-pts-per-pair={String(ptsPerPair)}
-    data-user-id={userId}
     data-in-session={String(inSession)}
   ></div>
 

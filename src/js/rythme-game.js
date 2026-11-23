@@ -7,7 +7,6 @@ const spawnMs    = parseInt(meta.dataset.spawnMs);     // ms entre spawns
 const basePts    = parseInt(meta.dataset.basePts);     // pts max par frappe
 const totalTime  = parseInt(meta.dataset.totalTime);   // durée en secondes
 const sessionId  = meta.dataset.sessionId;
-const gameUserId = meta.dataset.userId;
 const inSession  = meta.dataset.inSession === 'true';
 const difficulty = meta.dataset.difficulty;
 
@@ -267,20 +266,19 @@ function endGame() {
   document.getElementById('result-misses').textContent   = misses;
   document.getElementById('result-max-combo').textContent= maxCombo;
 
-  if (inSession && score > 0 && gameUserId) savePoints(score);
+  if (inSession && score > 0) savePoints(score);
   overlay.classList.remove('hidden');
 }
 
-// ── Sauvegarde points (même système que memory-game) ──────────────────────
+// ── Sauvegarde points ──────────────────────────────────────────────────────
+// Le serveur calcule et borne lui-même les points (POST /api/jeux/score) :
+// le score envoyé n'est qu'une indication, jamais cru tel quel.
 function savePoints(pts) {
-  fetch('/api/pb/collections/users/records/' + gameUserId)
-  .then(r => r.json())
-  .then(u => fetch('/api/pb/collections/users/records/' + gameUserId, {
-    method:  'PATCH',
+  fetch('/api/jeux/score', {
+    method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ points: (u.points ?? 0) + pts }),
-  }))
-  .catch(() => {});
+    body:    JSON.stringify({ jeu: 'rythme', score: pts }),
+  }).catch(() => {});
 }
 
 // ── Compte à rebours ──────────────────────────────────────────────────────

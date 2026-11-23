@@ -9,12 +9,10 @@ import arrowLeftIcon   from '../assets/icon/arrow_left_lg.svg';
 import creditCardIcon  from '../assets/icon/credit_card.svg';
 import lockIcon        from '../assets/icon/lock.svg';
 
-const planId = Astro.url.searchParams.get('plan') ?? 'vip';
-const token  = Astro.cookies.get('pb_token')?.value ?? null;
-const userId = Astro.cookies.get('pb_user_id')?.value ?? null;
+// Page réservée aux utilisateurs connectés
+if (!Astro.locals.user) return Astro.redirect('/connexion?redirect=' + encodeURIComponent(Astro.url.pathname + Astro.url.search));
 
-// Correspondance plan → valeur PocketBase
-const planPbValue = { vip: 'VIP', premium: 'Premium' };
+const planId = Astro.url.searchParams.get('plan') ?? 'vip';
 
 const plans = {
   vip: {
@@ -73,11 +71,11 @@ const plan = plans[planId] ?? plans.vip;
       <div style="width:68px;height:68px;background:#347645;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">
         <Image src={checkIcon} alt="" width={32} height={32} class="brightness-0 invert" />
       </div>
-      <p style="color:#72c073;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin:0 0 8px;">Paiement simulé</p>
-      <p style="color:white;font-size:22px;font-weight:600;margin:0 0 12px;letter-spacing:-0.5px;">Abonnement {plan.nom} activé !</p>
+      <p style="color:#72c073;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin:0 0 8px;">Information</p>
+      <p style="color:white;font-size:22px;font-weight:600;margin:0 0 12px;letter-spacing:-0.5px;">Paiement en ligne non activé</p>
       <p style="color:rgba(247,241,237,0.55);font-size:14px;font-weight:500;line-height:1.65;margin:0 0 28px;">
-        Dans un vrai contexte, votre abonnement serait maintenant actif.<br/>
-        Ceci est une démonstration — aucun paiement n'a été effectué.
+        Le paiement en ligne n'est pas encore activé : aucun paiement n'a été effectué.<br/>
+        L'abonnement {plan.nom} est attribué par un administrateur. Contactez-nous pour l'obtenir.
       </p>
       <a href="/" style="display:flex;align-items:center;justify-content:center;height:50px;background:#347645;color:white;font-size:15px;font-weight:500;text-decoration:none;border-radius:4px;">
         Retour à l'accueil
@@ -310,9 +308,9 @@ const plan = plans[planId] ?? plans.vip;
 
 </Layout>
 
-<script is:inline define:vars={{ userId, planPbValue, planId }}>
-  // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
-  // vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
+<script is:inline>
+  // Aucun abonnement n'est modifié depuis le navigateur : c'est un droit,
+  // attribué uniquement par un administrateur (le paiement en ligne n'est pas activé).
   document.getElementById('demo-close').addEventListener('click', function () {
     document.getElementById('demo-overlay').style.display = 'none';
   });
@@ -339,24 +337,11 @@ const plan = plans[planId] ?? plans.vip;
   ['card-expiry','card-expiry-m'].forEach(function(id) { var el = document.getElementById(id); if (el) fmtExpiry(el); });
   ['card-cvv','card-cvv-m'].forEach(function(id)    { var el = document.getElementById(id); if (el) fmtCvv(el); });
 
-  async function updateAbonnement() {
-    var newPlan = planPbValue[planId];
-    if (!newPlan || !userId) return;
-    try {
-      await fetch('/api/pb/collections/users/records/' + userId, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ abonnements: newPlan }),
-      });
-    } catch (_) {}
-  }
-
   function handleSubmit(e) {
     e.preventDefault();
     var btn = document.getElementById('btn-pay');
     if (btn) { btn.disabled = true; btn.textContent = 'Traitement…'; }
-    setTimeout(async function () {
-      await updateAbonnement();
+    setTimeout(function () {
       document.getElementById('success-overlay').style.display = 'flex';
     }, 1500);
   }

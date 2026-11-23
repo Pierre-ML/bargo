@@ -1,54 +1,29 @@
 ---
 // @ts-nocheck
 import Layout from '../layouts/Layout.astro';
-import PbImage from '../components/PbImage.astro';
+import ImageFichier from '../components/ImageFichier.astro';
 import LikeButton from '../components/LikeButton.astro';
 import Pagination from '../components/Pagination.astro';
 import HeroSection from '../components/HeroSection.astro';
 import likeIcon     from '../assets/icon/like.svg';
 import likeFillIcon from '../assets/icon/like_fill.svg';
-import { PB_URL } from '../../backend/backend.js';
+import { listerArticlesPourUtilisateur } from '../lib/db.ts';
 
-const page      = parseInt(Astro.url.searchParams.get('page') ?? '1');
-const activeTab = Astro.url.searchParams.get('tab') ?? 'decoration_avatar';
-const perPage   = 12;
+const page        = Math.max(1, parseInt(Astro.url.searchParams.get('page') ?? '1', 10) || 1);
+const tabsValides = ['decoration_avatar', 'theme', 'titre'];
+const tabDemande  = Astro.url.searchParams.get('tab') ?? 'decoration_avatar';
+const activeTab   = tabsValides.includes(tabDemande) ? tabDemande : 'decoration_avatar';
+const perPage     = 12;
 
-const filter = encodeURIComponent(`type="${activeTab}"`);
-const res  = await fetch(`${PB_URL}/api/collections/boutique/records?page=${page}&perPage=${perPage}&sort=created&filter=${filter}`);
-const data = await res.json();
-const produits   = data.items ?? [];
-const totalPages = Math.ceil((data.totalItems ?? 0) / perPage);
+// Session (middleware) et points (table droits)
+const isAuth     = !!Astro.locals.user;
+const userPoints = isAuth ? (Astro.locals.droits?.points ?? 0) : null;
 
-// Auth + user data
-const userId = Astro.cookies.get('pb_user_id')?.value;
-const token  = Astro.cookies.get('pb_token')?.value;
-const isAuth = !!(userId && token);
-
-let userPoints       = null;
-let userItemsFavori  = [];
-let possedDecoration = [];
-let possedTitre      = [];
-let possedTheme      = [];
-let equipedDecoration = null;
-let equipedTitre      = null;
-let equipedTheme      = null;
-
-if (isAuth) {
-  const userRes = await fetch(`${PB_URL}/api/collections/users/records/${userId}`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (userRes.ok) {
-    const user = await userRes.json();
-    userPoints        = user.points ?? 0;
-    userItemsFavori   = Array.isArray(user.items_favori)            ? user.items_favori            : [];
-    possedDecoration  = Array.isArray(user.possed_avatar_decoration) ? user.possed_avatar_decoration : [];
-    possedTitre       = Array.isArray(user.possed_titre)             ? user.possed_titre             : [];
-    possedTheme       = Array.isArray(user.possed_theme)             ? user.possed_theme             : [];
-    equipedDecoration = user.equiper_avatar_decoration ?? null;
-    equipedTitre      = user.equiper_titre             ?? null;
-    equipedTheme      = user.equiper_theme             ?? null;
-  }
-}
+// Articles du type actif avec leur état pour l'utilisateur (possédé, équipé, favori)
+const { items: produits, total } = listerArticlesPourUtilisateur(
+  Astro.locals.user?.id ?? null, activeTab, page, perPage
+);
+const totalPages = Math.ceil(total / perPage);
 
 const tabs = [
   { id: 'decoration_avatar', label: 'Décoration avatar' },
@@ -56,21 +31,11 @@ const tabs = [
   { id: 'titre',             label: 'Titre' },
 ];
 
-function getImageFile(produit) {
-  if (produit.type === 'decoration_avatar') return produit.type_decoration_avatar ?? null;
-  if (produit.type === 'theme')             return produit.type_them              ?? null;
-  return null;
-}
-
 // 'equipe' | 'equiper' | 'acheter' | 'insuffisant' | 'connexion'
 function getButtonState(produit) {
   if (!isAuth) return 'connexion';
-  const possed   = produit.type === 'decoration_avatar' ? possedDecoration :
-                   produit.type === 'theme'              ? possedTheme      : possedTitre;
-  const equipped = produit.type === 'decoration_avatar' ? equipedDecoration :
-                   produit.type === 'theme'              ? equipedTheme      : equipedTitre;
-  if (equipped === produit.id)         return 'equipe';
-  if (possed.includes(produit.id))     return 'equiper';
+  if (produit.equipe)  return 'equipe';
+  if (produit.possede) return 'equiper';
   if ((userPoints ?? 0) >= produit.prix) return 'acheter';
   return 'insuffisant';
 }
@@ -122,7 +87,6 @@ function getButtonState(produit) {
       {produits.length > 0 ? (
         <div id="boutique-grid" class="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-8">
           {produits.map(produit => {
-            const imageFile = getImageFile(produit);
             const state     = getButtonState(produit);
 
             const btnLabel = state === 'equipe'       ? 'Équipé'     :
@@ -145,11 +109,11 @@ function getButtonState(produit) {
                   <div class="h-40 bg-neutral-500 flex items-center justify-center">
                     {produit.type === 'titre' ? (
                       <div class="flex items-center justify-center px-4">
-                        <p class="text-white font-bold text-5 text-center m-0">{produit.type_titre ?? produit.nom}</p>
+                        <p class="text-white font-bold text-5 text-center m-0">{produit.titre ?? produit.nom}</p>
                       </div>
-                    ) : imageFile ? (
+                    ) : produit.image ? (
                       <div class="size-27.5 rounded-full overflow-hidden">
-                        <PbImage record={produit} recordImage={imageFile} width={150} height={150} />
+                        <ImageFichier cle={produit.image} alt={produit.nom} width={150} height={150} />
                       </div>
                     ) : (
                       <div class="size-27.5 rounded-full bg-neutral-600"></div>
@@ -159,7 +123,7 @@ function getButtonState(produit) {
                     <div class="flex items-center justify-between mb-3">
                       <h3 class="m-0 text-black text-sm">{produit.nom}</h3>
                       {isAuth && (
-                        <LikeButton id={produit.id} liked={userItemsFavori.includes(produit.id)} variant="item" class="p-0 border-0 bg-transparent cursor-pointer" ariaLabel="Favori" />
+                        <LikeButton id={produit.id} liked={produit.favori} variant="item" class="p-0 border-0 bg-transparent cursor-pointer" ariaLabel="Favori" />
                       )}
                     </div>
                     {state === 'connexion' ? (
@@ -188,11 +152,11 @@ function getButtonState(produit) {
 
                   {produit.type === 'titre' ? (
                     <div class="absolute top-10.5 left-1/2 -translate-x-1/2 w-37.5 h-37.5 rounded-full bg-neutral-600 flex items-center justify-center px-3">
-                      <p class="text-white font-bold text-5 text-center m-0 leading-snug">{produit.type_titre ?? produit.nom}</p>
+                      <p class="text-white font-bold text-5 text-center m-0 leading-snug">{produit.titre ?? produit.nom}</p>
                     </div>
-                  ) : imageFile ? (
+                  ) : produit.image ? (
                     <div class="absolute top-10.5 left-1/2 -translate-x-1/2 size-37.5 rounded-full overflow-hidden">
-                      <PbImage record={produit} recordImage={imageFile} width={150} height={150} />
+                      <ImageFichier cle={produit.image} alt={produit.nom} width={150} height={150} />
                     </div>
                   ) : (
                     <div class="absolute top-10.5 left-1/2 -translate-x-1/2 size-37.5 rounded-full bg-neutral-600"></div>
@@ -201,7 +165,7 @@ function getButtonState(produit) {
                   <div class="absolute top-59.75 left-7.25 right-6.75 flex items-center justify-between">
                     <h3 class="m-0 text-black text-5 truncate">{produit.nom}</h3>
                     {isAuth && (
-                      <LikeButton id={produit.id} liked={userItemsFavori.includes(produit.id)} variant="item" class="p-0 border-0 bg-transparent cursor-pointer shrink-0" ariaLabel="Favori" />
+                      <LikeButton id={produit.id} liked={produit.favori} variant="item" class="p-0 border-0 bg-transparent cursor-pointer shrink-0" ariaLabel="Favori" />
                     )}
                   </div>
 
@@ -241,90 +205,53 @@ function getButtonState(produit) {
   <!-- Toast feedback -->
   <div id="boutique-toast" style="position:fixed; bottom:100px; left:50%; transform:translateX(-50%) translateY(20px); background:#1E1E1E; color:white; padding:12px 24px; border-radius:8px; font-size:14px; font-family:'Inter',sans-serif; font-weight:500; opacity:0; transition:opacity 0.25s,transform 0.25s; pointer-events:none; z-index:300; white-space:nowrap;"></div>
 
-  <script is:inline define:vars={{ userId, isAuth, perPage, activeTab,
-    possedDecoration, possedTitre, possedTheme,
-    equipedDecoration, equipedTitre, equipedTheme,
-    userPoints,
+  <script is:inline define:vars={{ isAuth, activeTab, userPoints,
     likeIconSrc: likeIcon.src, likeFillIconSrc: likeFillIcon.src }}>
 (function () {
-  // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
-  // vers PB_URL (privé) côté serveur, et lit le token depuis le cookie httpOnly.
+  // Aucune donnée sensible côté client : la session est un cookie httpOnly,
+  // les achats / équipements / favoris passent par les routes /api du serveur.
 
-  // ── LIKE (items_favori) ──────────────────────────────────────────────────────
-  var favs = { items_favori: [] };
+  var points     = userPoints || 0;
+  var currentTab = activeTab;
 
-  function toggleLike(field, itemId, emptyEl, filledEl) {
-    var current = favs[field] || [];
-    var idx     = current.indexOf(itemId);
-    var updated;
-    if (idx >= 0) {
-      updated = current.filter(function (id) { return id !== itemId; });
-      emptyEl  && emptyEl.classList.remove('hidden');
-      filledEl && filledEl.classList.add('hidden');
-    } else {
-      updated = current.concat([itemId]);
-      emptyEl  && emptyEl.classList.add('hidden');
-      filledEl && filledEl.classList.remove('hidden');
-    }
-    favs[field] = updated;
-    if (!userId) return;
-    var body = {};
-    body[field] = updated;
-    fetch('/api/pb/collections/users/records/' + userId, {
-      method:  'PATCH',
+  function postJson(url, body) {
+    return fetch(url, {
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body),
-    }).catch(function () {
-      favs[field] = current;
-      if (idx >= 0) {
-        emptyEl  && emptyEl.classList.add('hidden');
-        filledEl && filledEl.classList.remove('hidden');
-      } else {
-        emptyEl  && emptyEl.classList.remove('hidden');
-        filledEl && filledEl.classList.add('hidden');
-      }
     });
+  }
+
+  // ── LIKE (favoris d'articles) ────────────────────────────────────────────────
+  function setLiked(id, liked) {
+    document.querySelectorAll('.like-btn-item').forEach(function (btn) {
+      if (btn.dataset.id !== id) return;
+      var emptyEl  = btn.querySelector('.like-empty');
+      var filledEl = btn.querySelector('.like-filled');
+      if (emptyEl)  emptyEl.classList.toggle('hidden', liked);
+      if (filledEl) filledEl.classList.toggle('hidden', !liked);
+    });
+  }
+
+  async function toggleLike(id) {
+    try {
+      var res = await postJson('/api/favoris', { type: 'article', id: id });
+      if (!res.ok) return;
+      var data = await res.json();
+      setLiked(id, data.favori === true);
+    } catch (e) { /* rien : l'état affiché reste celui du serveur */ }
   }
 
   function initBtns() {
     document.querySelectorAll('.like-btn-item').forEach(function (btn) {
-      var id       = btn.dataset.id;
-      var emptyEl  = btn.querySelector('.like-empty');
-      var filledEl = btn.querySelector('.like-filled');
-      if (favs.items_favori.indexOf(id) >= 0) {
-        emptyEl  && emptyEl.classList.add('hidden');
-        filledEl && filledEl.classList.remove('hidden');
-      }
-      btn.addEventListener('click', function () {
-        toggleLike('items_favori', id, emptyEl, filledEl);
-      });
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', function () { toggleLike(btn.dataset.id); });
     });
   }
+  initBtns();
 
-  if (userId) {
-    fetch('/api/pb/collections/users/records/' + userId)
-    .then(function (r) { return r.ok ? r.json() : {}; })
-    .then(function (user) {
-      favs.items_favori = Array.isArray(user.items_favori) ? user.items_favori : [];
-      initBtns();
-    })
-    .catch(initBtns);
-  } else {
-    initBtns();
-  }
-
-  // ── BOUTIQUE TABS ────────────────────────────────────────────────────────────
-  var state = {
-    points:   userPoints || 0,
-    possed:   { decoration_avatar: possedDecoration || [], titre: possedTitre || [], theme: possedTheme || [] },
-    equipped: { decoration_avatar: equipedDecoration || null, titre: equipedTitre || null, theme: equipedTheme || null },
-  };
-
-  var currentTab = activeTab;
-
-  var POSSED_FIELD  = { decoration_avatar: 'possed_avatar_decoration', titre: 'possed_titre', theme: 'possed_theme' };
-  var EQUIP_FIELD   = { decoration_avatar: 'equiper_avatar_decoration', titre: 'equiper_titre', theme: 'equiper_theme' };
-
+  // ── BOUTIQUE ─────────────────────────────────────────────────────────────────
   function showToast(msg, ok) {
     var t = document.getElementById('boutique-toast');
     if (!t) return;
@@ -338,97 +265,102 @@ function getButtonState(produit) {
     }, 2800);
   }
 
-  function getState(itemId, itemType, prix) {
+  var LABELS = {
+    equipe:      function () { return 'Équipé'; },
+    equiper:     function () { return 'Équiper'; },
+    acheter:     function (prix) { return 'Acheter — ' + prix + ' pts'; },
+    insuffisant: function (prix) { return prix + ' pts requis'; },
+  };
+  var CLASSES = {
+    equipe:      'bg-primary-600 cursor-default',
+    equiper:     'bg-primary-900 cursor-pointer hover:opacity-90',
+    acheter:     'bg-neutral-800 cursor-pointer hover:opacity-90',
+    insuffisant: 'bg-neutral-300 cursor-not-allowed',
+  };
+
+  // État d'un article d'après les indicateurs du serveur (possede / equipe) et les points
+  function getState(possede, equipe, prix) {
     if (!isAuth) return 'connexion';
-    if (state.equipped[itemType] === itemId)            return 'equipe';
-    if ((state.possed[itemType] || []).includes(itemId)) return 'equiper';
-    if (state.points >= prix)                           return 'acheter';
-    return 'insuffisant';
+    if (equipe)  return 'equipe';
+    if (possede) return 'equiper';
+    return points >= prix ? 'acheter' : 'insuffisant';
   }
 
-  function applyBtnState(btn, s, prix) {
-    var labels = {
-      equipe:      'Équipé',
-      equiper:     'Équiper',
-      acheter:     'Acheter — ' + prix + ' pts',
-      insuffisant: prix + ' pts requis',
-    };
-    var classes = {
-      equipe:      'bg-primary-600 cursor-default',
-      equiper:     'bg-primary-900 cursor-pointer hover:opacity-90',
-      acheter:     'bg-neutral-800 cursor-pointer hover:opacity-90',
-      insuffisant: 'bg-neutral-300 cursor-not-allowed',
-    };
-    btn.textContent = labels[s] || labels.acheter;
+  function applyBtnState(btn, s) {
+    var prix = parseInt(btn.dataset.itemPrix, 10) || 0;
+    btn.textContent = LABELS[s](prix);
     btn.disabled    = (s === 'equipe' || s === 'insuffisant');
     btn.dataset.state = s;
     ['bg-primary-600','bg-primary-900','bg-neutral-800','bg-neutral-300',
      'cursor-default','cursor-pointer','cursor-not-allowed','hover:opacity-90'].forEach(function (c) {
       btn.classList.remove(c);
     });
-    (classes[s] || classes.acheter).split(' ').forEach(function (c) { btn.classList.add(c); });
+    CLASSES[s].split(' ').forEach(function (c) { btn.classList.add(c); });
+  }
+
+  function actionBtns() {
+    return document.querySelectorAll('.boutique-action-btn');
+  }
+
+  // Après un achat : les boutons "acheter" / "insuffisant" dépendent du nouveau solde
+  function refreshPurchasable() {
+    actionBtns().forEach(function (b) {
+      var s = b.dataset.state;
+      if (s !== 'acheter' && s !== 'insuffisant') return;
+      applyBtnState(b, points >= (parseInt(b.dataset.itemPrix, 10) || 0) ? 'acheter' : 'insuffisant');
+    });
   }
 
   async function buyItem(btn) {
-    var itemId   = btn.dataset.itemId;
-    var itemType = btn.dataset.itemType;
-    var prix     = parseInt(btn.dataset.itemPrix, 10);
-    var field    = POSSED_FIELD[itemType];
-    if (!field || state.points < prix) return;
+    var itemId = btn.dataset.itemId;
+    var avant  = btn.dataset.state;
     btn.disabled    = true;
     btn.textContent = '...';
-    var newPossed = (state.possed[itemType] || []).concat([itemId]);
-    var newPoints = state.points - prix;
     try {
-      var res = await fetch('/api/pb/collections/users/records/' + userId, {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ [field]: newPossed, points: newPoints }),
-      });
-      if (!res.ok) throw new Error();
-      state.possed[itemType] = newPossed;
-      state.points = newPoints;
+      var res  = await postJson('/api/boutique/acheter', { article_id: itemId });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok) {
+        applyBtnState(btn, avant);
+        showToast(data.error || "Erreur lors de l'achat. Réessayez.", false);
+        return;
+      }
+      points = data.points;
       var ptEl = document.getElementById('user-points-display');
-      if (ptEl) ptEl.textContent = newPoints + ' pts';
-      document.querySelectorAll('.boutique-action-btn[data-item-id="' + itemId + '"]').forEach(function (b) {
-        applyBtnState(b, 'equiper', prix);
+      if (ptEl) ptEl.textContent = points + ' pts';
+      actionBtns().forEach(function (b) {
+        if (b.dataset.itemId === itemId) applyBtnState(b, 'equiper');
       });
+      refreshPurchasable();
       showToast('Achat réussi ! Vous pouvez maintenant équiper cet article.', true);
-    } catch {
-      applyBtnState(btn, getState(itemId, itemType, prix), prix);
-      showToast('Erreur lors de l\'achat. Réessayez.', false);
+    } catch (e) {
+      applyBtnState(btn, avant);
+      showToast("Erreur lors de l'achat. Réessayez.", false);
     }
   }
 
   async function equipItem(btn) {
     var itemId   = btn.dataset.itemId;
     var itemType = btn.dataset.itemType;
-    var prix     = parseInt(btn.dataset.itemPrix, 10);
-    var field    = EQUIP_FIELD[itemType];
-    if (!field) return;
     btn.disabled    = true;
     btn.textContent = '...';
     try {
-      var res = await fetch('/api/pb/collections/users/records/' + userId, {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ [field]: itemId }),
-      });
-      if (!res.ok) throw new Error();
-      var oldId = state.equipped[itemType];
-      if (oldId && oldId !== itemId) {
-        document.querySelectorAll('.boutique-action-btn[data-item-id="' + oldId + '"]').forEach(function (b) {
-          applyBtnState(b, 'equiper', parseInt(b.dataset.itemPrix, 10));
-        });
+      var res  = await postJson('/api/boutique/equiper', { article_id: itemId });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok) {
+        applyBtnState(btn, 'equiper');
+        showToast(data.error || "Erreur lors de l'équipement. Réessayez.", false);
+        return;
       }
-      state.equipped[itemType] = itemId;
-      document.querySelectorAll('.boutique-action-btn[data-item-id="' + itemId + '"]').forEach(function (b) {
-        applyBtnState(b, 'equipe', prix);
+      actionBtns().forEach(function (b) {
+        if (b.dataset.itemType === itemType && b.dataset.state === 'equipe' && b.dataset.itemId !== itemId) {
+          applyBtnState(b, 'equiper');
+        }
+        if (b.dataset.itemId === itemId) applyBtnState(b, 'equipe');
       });
       showToast('Article équipé ! Votre profil a été mis à jour.', true);
-    } catch {
-      applyBtnState(btn, 'equiper', prix);
-      showToast('Erreur lors de l\'équipement. Réessayez.', false);
+    } catch (e) {
+      applyBtnState(btn, 'equiper');
+      showToast("Erreur lors de l'équipement. Réessayez.", false);
     }
   }
 
@@ -440,57 +372,47 @@ function getButtonState(produit) {
     if (s === 'equiper')  equipItem(btn);
   });
 
-  function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
 
   function cardHtml(p) {
-    var imgField = p.type === 'decoration_avatar' ? p.type_decoration_avatar :
-                   p.type === 'theme'             ? p.type_them              : null;
-    var imgSrc   = imgField ? '/pb-files/' + p.collectionName + '/' + p.id + '/' + imgField : '';
-    var prix     = p.prix || 0;
-    var s        = getState(p.id, p.type, prix);
+    var imgSrc = p.image ? '/fichiers/' + p.image : '';
+    var prix   = p.prix || 0;
+    var s      = getState(p.possede, p.equipe, prix);
+    var label  = s === 'connexion' ? 'Se connecter' : LABELS[s](prix);
 
-    var btnLabel = s === 'equipe'      ? 'Équipé'                     :
-                   s === 'equiper'     ? 'Équiper'                    :
-                   s === 'acheter'     ? 'Acheter — ' + prix + ' pts' :
-                   s === 'insuffisant' ? prix + ' pts requis'         : 'Se connecter';
-
-    var btnBg  = s === 'equipe'      ? 'bg-primary-600 cursor-default'          :
-                 s === 'equiper'     ? 'bg-primary-900 cursor-pointer hover:opacity-90' :
-                 s === 'acheter'     ? 'bg-neutral-800 cursor-pointer hover:opacity-90' :
-                 s === 'insuffisant' ? 'bg-neutral-300 cursor-not-allowed'      :
-                                      'bg-neutral-800 cursor-pointer hover:opacity-90';
-
+    var btnBg  = s === 'connexion' ? 'bg-neutral-800 cursor-pointer hover:opacity-90' : CLASSES[s];
     var disabled = (s === 'equipe' || s === 'insuffisant') ? 'disabled' : '';
-    var btnAttrs = isAuth
-      ? 'class="boutique-action-btn w-full h-12 flex items-center justify-center transition-opacity border-0 text-white text-3.5 font-medium ' + btnBg + '" ' +
-        'data-item-id="' + esc(p.id) + '" data-item-type="' + esc(p.type) + '" data-item-prix="' + prix + '" data-state="' + s + '" ' + disabled
-      : 'class="w-full h-12 bg-neutral-800 flex items-center justify-center hover:opacity-90 transition-opacity border-0 text-white text-3.5 font-medium cursor-pointer"';
+    var attrs  = 'data-item-id="' + esc(p.id) + '" data-item-type="' + esc(p.type) + '" data-item-prix="' + prix + '" data-state="' + s + '" ' + disabled;
+    var texte  = p.titre || p.nom;
 
     var circleContent = p.type === 'titre'
-      ? '<div class="size-27.5 rounded-full bg-neutral-600 flex items-center justify-center px-2"><p style="color:white;font-weight:700;font-size:16px;text-align:center;margin:0;line-height:1.3;">' + esc(p.type_titre || p.nom) + '</p></div>'
+      ? '<div class="size-27.5 rounded-full bg-neutral-600 flex items-center justify-center px-2"><p style="color:white;font-weight:700;font-size:16px;text-align:center;margin:0;line-height:1.3;">' + esc(texte) + '</p></div>'
       : imgSrc
-        ? '<div class="size-27.5 rounded-full overflow-hidden"><img src="' + imgSrc + '" style="width:100%;height:100%;object-fit:cover;" /></div>'
+        ? '<div class="size-27.5 rounded-full overflow-hidden"><img src="' + esc(imgSrc) + '" alt="' + esc(p.nom) + '" style="width:100%;height:100%;object-fit:cover;" /></div>'
         : '<div class="size-27.5 rounded-full bg-neutral-600"></div>';
 
     var circleContentD = p.type === 'titre'
-      ? '<div class="absolute top-10.5 left-1/2 -translate-x-1/2 size-37.5 rounded-full bg-neutral-600 flex items-center justify-center px-3"><p style="color:white;font-weight:700;font-size:18px;text-align:center;margin:0;line-height:1.3;">' + esc(p.type_titre || p.nom) + '</p></div>'
+      ? '<div class="absolute top-10.5 left-1/2 -translate-x-1/2 size-37.5 rounded-full bg-neutral-600 flex items-center justify-center px-3"><p style="color:white;font-weight:700;font-size:18px;text-align:center;margin:0;line-height:1.3;">' + esc(texte) + '</p></div>'
       : imgSrc
-        ? '<div class="absolute top-10.5 left-1/2 -translate-x-1/2 size-37.5 rounded-full overflow-hidden"><img src="' + imgSrc + '" style="width:100%;height:100%;object-fit:cover;" /></div>'
+        ? '<div class="absolute top-10.5 left-1/2 -translate-x-1/2 size-37.5 rounded-full overflow-hidden"><img src="' + esc(imgSrc) + '" alt="' + esc(p.nom) + '" style="width:100%;height:100%;object-fit:cover;" /></div>'
         : '<div class="absolute top-10.5 left-1/2 -translate-x-1/2 size-37.5 rounded-full bg-neutral-600"></div>';
 
     var likeHtml = isAuth
       ? '<button class="like-btn-item p-0 border-0 bg-transparent cursor-pointer shrink-0" data-id="' + esc(p.id) + '" type="button" aria-label="Favori">' +
-          '<img src="' + likeIconSrc + '" alt="" class="like-empty size-6" />' +
-          '<img src="' + likeFillIconSrc + '" alt="" class="like-filled size-6 hidden" />' +
+          '<img src="' + likeIconSrc + '" alt="" class="like-empty size-6' + (p.favori ? ' hidden' : '') + '" />' +
+          '<img src="' + likeFillIconSrc + '" alt="" class="like-filled size-6' + (p.favori ? '' : ' hidden') + '" />' +
         '</button>'
       : '';
 
     var btnMobile = isAuth
-      ? '<button type="button" ' + btnAttrs + '>' + esc(btnLabel) + '</button>'
+      ? '<button type="button" class="boutique-action-btn w-full h-12 flex items-center justify-center transition-opacity border-0 text-white text-3.5 font-medium ' + btnBg + '" ' + attrs + '>' + esc(label) + '</button>'
       : '<a href="/connexion" class="w-full h-12 bg-neutral-800 flex items-center justify-center hover:opacity-90 transition-opacity no-underline"><span class="text-white text-3.5 font-medium">Se connecter</span></a>';
 
     var btnDesktop = isAuth
-      ? '<button type="button" class="boutique-action-btn absolute top-73.75 bottom-3 left-7.25 right-7.5 flex items-center justify-center transition-opacity border-0 text-white text-4 font-medium ' + btnBg + '" data-item-id="' + esc(p.id) + '" data-item-type="' + esc(p.type) + '" data-item-prix="' + prix + '" data-state="' + s + '" ' + disabled + '>' + esc(btnLabel) + '</button>'
+      ? '<button type="button" class="boutique-action-btn absolute top-73.75 bottom-3 left-7.25 right-7.5 flex items-center justify-center transition-opacity border-0 text-white text-4 font-medium ' + btnBg + '" ' + attrs + '>' + esc(label) + '</button>'
       : '<a href="/connexion" class="absolute top-73.75 bottom-3 left-7.25 right-7.5 bg-neutral-800 flex items-center justify-center hover:opacity-90 transition-opacity no-underline"><span class="text-white text-4 font-medium">Se connecter</span></a>';
 
     return '<div>' +
@@ -517,11 +439,11 @@ function getButtonState(produit) {
   }
 
   async function loadTab(tabId) {
-    var filter = encodeURIComponent('type="' + tabId + '"');
-    var url    = '/api/pb/collections/boutique/records?page=1&perPage=' + perPage + '&sort=created&filter=' + filter;
-    var res    = await fetch(url);
-    var data   = res.ok ? await res.json() : { items: [] };
-    var items  = data.items || [];
+    var res   = await fetch('/api/boutique/articles?type=' + encodeURIComponent(tabId) + '&page=1');
+    var data  = res.ok ? await res.json() : { items: [] };
+    var items = data.items || [];
+    // Le serveur renvoie le solde réel : on le garde à jour
+    if (typeof data.points === 'number') points = data.points;
 
     var grid  = document.getElementById('boutique-grid');
     var empty = document.getElementById('boutique-empty');
@@ -542,7 +464,7 @@ function getButtonState(produit) {
         var p = document.createElement('p');
         p.id = 'boutique-empty';
         p.className = 'text-neutral-500 text-4 font-medium';
-        p.textContent = 'Aucun article disponible pour l\'instant.';
+        p.textContent = "Aucun article disponible pour l'instant.";
         p.style.opacity   = '0';
         p.style.transform = 'translateY(8px)';
         wrap.prepend(p);

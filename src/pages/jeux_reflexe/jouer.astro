@@ -2,12 +2,10 @@
 // @ts-nocheck
 import Layout from '../../layouts/Layout.astro';
 
-const token  = Astro.cookies.get('pb_token')?.value ?? '';
-const userId = Astro.cookies.get('pb_user_id')?.value ?? '';
-if (!token || !userId) return Astro.redirect('/connexion');
+if (!Astro.locals.user) return Astro.redirect('/connexion?redirect=' + encodeURIComponent(Astro.url.pathname + Astro.url.search));
 
 const sessionId  = Astro.url.searchParams.get('session') ?? '';
-const inSession  = !!(sessionId && token && userId);
+const inSession  = !!sessionId;
 const difficulty = Astro.url.searchParams.get('difficulty') ?? 'facile';
 const mode       = Astro.url.searchParams.get('mode') ?? 'fixe';
 
@@ -119,7 +117,6 @@ const modeBonus  = mode === 'aleatoire' ? 1.5 : 1;
     data-mode-bonus={String(modeBonus)}
     data-total-rounds={String(TOTAL_ROUNDS)}
     data-session-id={sessionId}
-    data-user-id={userId}
     data-in-session={String(inSession)}
   ></div>
 

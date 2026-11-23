@@ -1,23 +1,12 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { Image } from 'astro:assets';
-import { PB_URL } from '../../backend/backend.js';
 import checkIcon from '../assets/icon/check.svg';
 
-// Récupère l'abonnement actuel si connecté (pas de redirect si non connecté)
-const token  = Astro.cookies.get('pb_token')?.value;
-const userId = Astro.cookies.get('pb_user_id')?.value;
-let userAbonnements = null;
-if (token && userId) {
-  try {
-    const r = await fetch(`${PB_URL}/api/collections/users/records/${userId}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (r.ok) { const u = await r.json(); userAbonnements = u.abonnements ?? 'Gratuit'; }
-  } catch (_) {}
-}
+// Abonnement actuel (droit lu en base par le middleware ; null si non connecté)
+const userAbonnements = Astro.locals.droits?.abonnement ?? null;
 
-// Correspondance plan.id → valeur PocketBase
+// Correspondance plan.id → valeur de la colonne droits.abonnement
 const planPbValue = { gratuit: 'Gratuit', vip: 'VIP', premium: 'Premium' };
 
 const plans = [

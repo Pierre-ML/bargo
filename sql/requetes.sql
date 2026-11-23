@@ -183,11 +183,6 @@ SELECT id, texte, lu, created FROM notification
 WHERE user_id = ?
 ORDER BY created DESC LIMIT 20;
 
--- Nombre de notifications non lues (pastille de la cloche).
-SELECT COUNT(*) AS n FROM notification WHERE user_id = ? AND lu = 0;
-
--- Tout marquer comme lu (la clause user_id empêche de toucher celles des autres).
-UPDATE notification SET lu = 1 WHERE user_id = ? AND lu = 0;
 
 
 -- =====================================================================

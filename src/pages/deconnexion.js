@@ -1,6 +1,6 @@
 // Déconnexion : POST /deconnexion (formulaire), protégé par l'anti-CSRF du
 // middleware. Supprime la session better-auth côté serveur, efface ses
-// cookies, ainsi que les anciens cookies PocketBase, puis redirige.
+// cookies, puis redirige.
 import { auth } from '../lib/auth.js';
 import { redirigerAvecCookies } from '../lib/api.js';
 
@@ -9,12 +9,9 @@ export const prerender = false;
 const efface = (nom, secure = false) =>
   `${nom}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`;
 
-// Anciens cookies PocketBase (supprimés à la déconnexion)
-const ANCIENS_COOKIES = [efface('pb_token'), efface('pb_user_id')];
-
 export async function POST({ request }) {
   let headers = null;
-  const extra = [...ANCIENS_COOKIES];
+  const extra = [];
   try {
     ({ headers } = await auth.api.signOut({ headers: request.headers, returnHeaders: true }));
   } catch {

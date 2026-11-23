@@ -44,7 +44,6 @@ export async function POST({ request, locals }) {
   const secure = new URL(request.url).protocol === 'https:';
   const cookies = [
     efface('better-auth.session_token'), efface('better-auth.session_data'),
-    efface('pb_token'), efface('pb_user_id'),
   ];
   if (secure) cookies.push(efface('__Secure-better-auth.session_token', true), efface('__Secure-better-auth.session_data', true));
   for (const c of cookies) reponse.headers.append('Set-Cookie', c);

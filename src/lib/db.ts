@@ -286,19 +286,6 @@ export function getBar(id: string) {
   return bar;
 }
 
-/** Tous les jeux, avec leur première image dans `image`. */
-export function listerJeux() {
-  return db
-    .prepare(
-      `SELECT j.*,
-              (SELECT ji.fichier FROM jeu_image ji
-               WHERE ji.jeu_id = j.id ORDER BY ji.position LIMIT 1) AS image
-       FROM jeu j
-       ORDER BY j.created`
-    )
-    .all();
-}
-
 /** Un jeu avec `images` (liste ordonnée de clés de fichiers). */
 export function getJeu(id: string) {
   const jeu: any = db.prepare('SELECT * FROM jeu WHERE id = ?').get(id);
@@ -530,16 +517,6 @@ export function estFavori(userId: string, type: string, id: string): boolean {
   return !!db.prepare(`SELECT 1 FROM ${f.table} WHERE user_id = ? AND ${f.colonne} = ?`).get(userId, id);
 }
 
-/** Identifiants favoris d'un utilisateur pour un type. */
-export function listerFavorisIds(userId: string, type: string): string[] {
-  if (!typeFavoriValide(type)) return [];
-  const f = FAVORIS[type];
-  return db
-    .prepare(`SELECT ${f.colonne} AS id FROM ${f.table} WHERE user_id = ?`)
-    .all(userId)
-    .map((l: any) => l.id);
-}
-
 /**
  * Bascule un favori. Retourne { favori: boolean } ou null si le type est
  * invalide ou si la cible n'existe pas.
@@ -566,20 +543,6 @@ export function listerNotifications(userId: string) {
     )
     .all(userId)
     .map((l) => booleens(l, ['lu']));
-}
-
-/** Nombre de notifications non lues. */
-export function compterNotificationsNonLues(userId: string): number {
-  const l: any = db.prepare('SELECT COUNT(*) AS n FROM notification WHERE user_id = ? AND lu = 0').get(userId);
-  return l?.n ?? 0;
-}
-
-/** Marque lue(s) : une notification (id) ou toutes (sans id), uniquement celles de l'utilisateur. */
-export function marquerNotificationsLues(userId: string, id?: string | null): number {
-  if (id) {
-    return db.prepare('UPDATE notification SET lu = 1 WHERE id = ? AND user_id = ?').run(id, userId).changes;
-  }
-  return db.prepare('UPDATE notification SET lu = 1 WHERE user_id = ? AND lu = 0').run(userId).changes;
 }
 
 /** Invitations de session en attente : [{ session_id, nom, hote_pseudo }]. */

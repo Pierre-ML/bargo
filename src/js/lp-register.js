@@ -47,15 +47,16 @@ btn.addEventListener('click', async function () {
   btn.textContent = '...';
 
   try {
-    var res = await fetch('/api/pb/collections/users/records', {
+    // La route serveur crée le compte (better-auth) et pose le cookie de
+    // session httpOnly : aucun mot de passe ni jeton ne transite ensuite.
+    var res = await fetch('/api/compte/inscription', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pseudo: pseudo, email: email, password: password, passwordConfirm: confirm })
+      body: JSON.stringify({ pseudo: pseudo, email: email, password: password, passwordConfirm: confirm, cgu: cgu })
     });
-    var json = await res.json();
+    var json = await res.json().catch(function () { return {}; });
     if (!res.ok) {
-      var detail = json?.data?.email?.message || json?.message || "Erreur lors de l'inscription.";
-      showMsg(detail, false);
+      showMsg(json.error || "Erreur lors de l'inscription.", false);
       btn.disabled = false;
       btn.textContent = "S'inscrire";
     } else {
@@ -63,14 +64,9 @@ btn.addEventListener('click', async function () {
       btn.style.borderColor = '#72C073';
       btn.style.color       = '#fff';
       btn.textContent       = '✓ Compte créé !';
+      // Déjà connecté (cookie posé par la réponse) : direction l'onboarding
       setTimeout(function () {
-        var f  = document.createElement('form');
-        f.method = 'POST';
-        f.action = '/connexion';
-        var ei = document.createElement('input'); ei.type = 'hidden'; ei.name = 'email';    ei.value = email;    f.appendChild(ei);
-        var pi = document.createElement('input'); pi.type = 'hidden'; pi.name = 'password'; pi.value = password; f.appendChild(pi);
-        document.body.appendChild(f);
-        f.submit();
+        window.location.href = json.redirect || '/bienvenue';
       }, 1000);
     }
   } catch (e) {

@@ -15,9 +15,8 @@ import membre1     from '../assets/img/melvyn_philippon.avif';
 import membre2     from '../assets/img/pierre_mouilleseaux_lhuillier.avif';
 import membre3     from '../assets/img/alex_ringenbach.avif';
 
-const token  = Astro.cookies.get('pb_token')?.value;
-const userId = Astro.cookies.get('pb_user_id')?.value;
-if (token && userId) return Astro.redirect('/');
+// Déjà connecté (session better-auth lue par le middleware) -> accueil
+if (Astro.locals.user) return Astro.redirect('/');
 
 let bars = [];
 try { bars = await getCollection('bar', { sort: 'created' }); } catch (_) {}

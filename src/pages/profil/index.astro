@@ -1055,7 +1055,7 @@ const displayName = user.prenom
               <p class="text-4 font-medium text-black m-0 mb-4">
                 Connecté en tant que <span class="text-primary-500">{user.pseudo ?? user.email}</span>
               </p>
-              <form method="POST" enctype="application/x-www-form-urlencoded">
+              <form method="POST" action="/deconnexion" enctype="application/x-www-form-urlencoded">
                 <input type="hidden" name="_action" value="logout" />
                 <button type="submit"
                   class="inline-flex items-center gap-3 border-2 border-neutral-800 text-neutral-800 text-4 font-medium px-8 py-2.25 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer bg-transparent rounded">

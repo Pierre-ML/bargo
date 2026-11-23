@@ -55,7 +55,7 @@ export function ipClient(request, clientAddress) {
 }
 
 // ---------------------------------------------------------------------
-// Rate limiting en mémoire (copie de backend/rateLimit.js) : process Node
+// Rate limiting en mémoire (ancien backend/rateLimit.js, supprimé) : process Node
 // unique, pas de Redis. 5 tentatives par fenêtre de 15 minutes et par clé.
 // Préfixer la clé par l'action : limiter('connexion:' + ip).
 // ---------------------------------------------------------------------

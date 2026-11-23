@@ -258,6 +258,7 @@ CREATE TABLE IF NOT EXISTS session_barathon (
   automatique  INTEGER NOT NULL DEFAULT 0 CHECK (automatique IN (0,1)),
   hote_id      TEXT REFERENCES "user"(id) ON DELETE CASCADE,
   jeu_id       TEXT REFERENCES jeu(id) ON DELETE SET NULL,
+  bar_actuel   INTEGER NOT NULL DEFAULT 0 CHECK (bar_actuel >= 0),
   created TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
@@ -295,3 +296,17 @@ CREATE TABLE IF NOT EXISTS invitation_session (
   PRIMARY KEY (session_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS idx_invitation_session_user ON invitation_session(user_id);
+
+-- ---------------------------------------------------------------------
+-- 5. Parties de jeux : trace des points accordés par le serveur
+--    (plafond quotidien et délai minimum entre deux parties)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS partie (
+  id      TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+  jeu     TEXT NOT NULL,
+  score   INTEGER NOT NULL DEFAULT 0,
+  points  INTEGER NOT NULL DEFAULT 0,
+  created TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_partie_user_created ON partie(user_id, created);

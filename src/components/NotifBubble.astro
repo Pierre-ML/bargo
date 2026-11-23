@@ -4,40 +4,19 @@ import { Image } from 'astro:assets';
 import notifIcon from '../assets/icon/notifcation.svg';
 import notifSessionIcon from '../assets/icon/notif_session.svg';
 import arrowRightLg from '../assets/icon/arrow_right_lg.svg';
-import { PB_URL } from '../../backend/backend.js';
+import { listerNotifications, listerDemandesRecues, listerInvitationsSession } from "../lib/db.ts";
 
-const token  = Astro.cookies.get('pb_token')?.value;
-const userId = Astro.cookies.get('pb_user_id')?.value;
-const isLoggedIn = !!(token && userId);
+const isLoggedIn = !!Astro.locals.user;
 
 let demandeAmies   = [];
 let demandeSession = [];
 let notifications  = [];
 
 if (isLoggedIn) {
-  try {
-    const userRes = await fetch(
-      `${PB_URL}/api/collections/users/records/${userId}?expand=demande_amies,demande_session`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (userRes.ok) {
-      const user = await userRes.json();
-      demandeAmies   = user.expand?.demande_amies  ?? [];
-      demandeSession = user.expand?.demande_session ?? [];
-    }
-  } catch {}
-
-  try {
-    const filter = encodeURIComponent(`user = "${userId}" && lu = false`);
-    const notifRes = await fetch(
-      `${PB_URL}/api/collections/notifications/records?perPage=10&sort=-created&filter=${filter}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (notifRes.ok) {
-      const data = await notifRes.json();
-      notifications = data.items ?? [];
-    }
-  } catch {}
+  const id = Astro.locals.user.id;
+  demandeAmies   = listerDemandesRecues(id);
+  demandeSession = listerInvitationsSession(id);
+  notifications  = listerNotifications(id).filter((n) => !n.lu).slice(0, 10);
 }
 
 const totalCount = demandeAmies.length + demandeSession.length + notifications.length;
@@ -94,7 +73,7 @@ function timeAgo(dateStr) {
               <Image src={notifSessionIcon} alt="" width={15} height={15} class="brightness-0 invert pointer-events-none" />
             </div>
             <p class="flex-1 text-xs font-semibold text-neutral-800 m-0 leading-snug">
-              Invitation au barathon <strong class="text-primary-900">{s.nom ?? 'Session sans nom'}</strong>
+              Invitation au barathon <strong class="text-primary-900">{s.nom || 'Session sans nom'}</strong>
             </p>
             <div class="w-2 h-2 rounded-full bg-red-500 shrink-0" aria-hidden="true"></div>
           </div>
@@ -106,7 +85,7 @@ function timeAgo(dateStr) {
               <Image src={notifIcon} alt="" width={14} height={14} class="brightness-0 invert pointer-events-none" />
             </div>
             <div class="flex-1 min-w-0">
-              <p class="text-xs font-semibold text-neutral-800 m-0 leading-snug">{notif.message ?? notif.texte ?? notif.contenu ?? 'Notification'}</p>
+              <p class="text-xs font-semibold text-neutral-800 m-0 leading-snug">{notif.texte || 'Notification'}</p>
               <p class="text-xs text-neutral-500 mt-0.75 mb-0">{timeAgo(notif.created)}</p>
             </div>
             <div class="w-2 h-2 rounded-full bg-red-500 shrink-0" aria-hidden="true"></div>

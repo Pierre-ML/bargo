@@ -10,12 +10,15 @@ export default defineConfig({
     plugins: [tailwindcss()]
   },
   output: 'server',
-  // Cloudflare Workers. Images : optimisées au build pour les pages prérendues ;
-  // sur les pages SSR, /_image renvoie l'original (pas de sharp sur Workers).
+  // Cloudflare Workers. Images : servies telles quelles depuis /_astro/ (service perso) ;
+  // l'endpoint /_image faisait un fetch vers le domaine public (erreur 526 en prod).
   adapter: cloudflare({
     platformProxy: { enabled: true },
-    imageService: 'compile',
+    imageService: 'custom',
   }),
+  image: {
+    service: { entrypoint: './src/lib/image-service.js' },
+  },
   env: {
     schema: {
       // URL de PocketBase, lue au build. Jamais de préfixe PUBLIC_.

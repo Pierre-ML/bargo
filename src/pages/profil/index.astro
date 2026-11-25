@@ -2,9 +2,8 @@
 // @ts-nocheck
 import Layout from '../../layouts/Layout.astro';
 import { Image } from 'astro:assets';
-import { getMonProfilComplet } from '../../lib/db.ts';
-import { urlFichier } from '../../lib/stockage.js';
-import ImageFichier from '../../components/ImageFichier.astro';
+import { getUserAuth, updateUser, deleteUser, getCollection, getImageUrl, PB_URL } from '../../../backend/backend.js';
+import PbImage from '../../components/PbImage.astro';
 import heartIcon    from '../../assets/icon/like.svg';
 import likeFillIcon from '../../assets/icon/like_fill.svg';
 import instaIcon    from '../../assets/icon/insta.svg';
@@ -20,67 +19,199 @@ import searchIcon     from '../../assets/icon/search.svg';
 import settingsIcon   from '../../assets/icon/settings.svg';
 
 // Auth guard
-if (!Astro.locals.user) {
-  return Astro.redirect('/connexion?redirect=' + encodeURIComponent(Astro.url.pathname));
-}
-const userId = Astro.locals.user.id;
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+if (!token || !userId) return Astro.redirect('/connexion');
 
-// Les modifications (profil, avatar, mot de passe, e-mail, suppression) passent
-// par les routes /api/profil et /api/compte, appelées en fetch par le script ci-dessous.
-const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
+let updateError   = '';
+let updateSuccess = false;
+let pwdError      = '';
+let pwdSuccess    = false;
+let emailError    = '';
+let emailSuccess  = false;
+let activeTab     = Astro.url.searchParams.get('tab') ?? 'profil';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action   = formData.get('_action')?.toString();
+
+  if (action === 'logout') {
+    Astro.cookies.delete('pb_token',   { path: '/' });
+    Astro.cookies.delete('pb_user_id', { path: '/' });
+    return Astro.redirect('/');
+  }
+
+  if (action === 'delete') {
+    await deleteUser(userId, token);
+    Astro.cookies.delete('pb_token',   { path: '/' });
+    Astro.cookies.delete('pb_user_id', { path: '/' });
+    return Astro.redirect('/');
+  }
+
+  if (action === 'edit') {
+    const pbData = new FormData();
+    for (const field of ['prenom', 'nom', 'pseudo', 'age', 'ville', 'insta', 'facbook', 'discord', 'description']) {
+      const val = formData.get(field);
+      if (val !== null && val.toString() !== '') pbData.append(field, val.toString());
+    }
+    const avatarFile = formData.get('avatar');
+    if (avatarFile instanceof File && avatarFile.size > 0) pbData.append('avatar', avatarFile, avatarFile.name);
+    const result = await updateUser(userId, token, pbData);
+    if (result) { updateSuccess = true; } else { updateError = 'Erreur lors de la mise à jour.'; }
+    activeTab = 'profil';
+  }
+
+  if (action === 'change_password') {
+    const oldPwd     = formData.get('old_password')?.toString()     ?? '';
+    const newPwd     = formData.get('new_password')?.toString()     ?? '';
+    const confirmPwd = formData.get('confirm_password')?.toString() ?? '';
+    if (!oldPwd || !newPwd || !confirmPwd) {
+      pwdError = 'Tous les champs sont requis.';
+    } else if (newPwd !== confirmPwd) {
+      pwdError = 'Les mots de passe ne correspondent pas.';
+    } else if (newPwd.length < 8) {
+      pwdError = 'Le mot de passe doit contenir au moins 8 caractères.';
+    } else {
+      const pbData = new FormData();
+      pbData.append('oldPassword',     oldPwd);
+      pbData.append('password',        newPwd);
+      pbData.append('passwordConfirm', confirmPwd);
+      const result = await updateUser(userId, token, pbData);
+      if (result) { pwdSuccess = true; } else { pwdError = 'Mot de passe actuel incorrect.'; }
+    }
+    activeTab = 'parametres';
+  }
+
+  if (action === 'change_email') {
+    const newEmail = formData.get('new_email')?.toString().trim() ?? '';
+    if (!newEmail || !newEmail.includes('@')) {
+      emailError = 'Adresse email invalide.';
+    } else {
+      const pbData = new FormData();
+      pbData.append('email', newEmail);
+      const result = await updateUser(userId, token, pbData);
+      if (result) { emailSuccess = true; } else { emailError = 'Erreur lors de la mise à jour.'; }
+    }
+    activeTab = 'parametres';
+  }
+}
 
 // Données utilisateur
-const user = getMonProfilComplet(userId);
-if (!user) return Astro.redirect('/connexion');
+const user = await getUserAuth(userId, token);
+if (!user || user.code === 404) {
+  Astro.cookies.delete('pb_token',   { path: '/' });
+  Astro.cookies.delete('pb_user_id', { path: '/' });
+  return Astro.redirect('/connexion');
+}
 
-const notifications = user.notifications;
-const barDecouver = { length: user.bars_decouverts };
-const totalBars = user.total_bars;
+// Notifications
+let notifications = [];
+try {
+  notifications = await getCollection('notifications', {
+    filter:  `user = "${userId}"`,
+    sort:    '-created',
+    perPage: 50
+  });
+} catch {}
 
-// Favoris
-const barsFavori     = user.favoris.bars;
-const jeuxFavori     = user.favoris.jeux;
-const boissonsFavori = user.favoris.boissons;
+// Bars découverts
+const barDecouver = Array.isArray(user.bar_decouver) ? user.bar_decouver : [];
+let totalBars = 0;
+try {
+  const bRes = await fetch(`${PB_URL}/api/collections/bar/records?perPage=1`);
+  if (bRes.ok) { const bd = await bRes.json(); totalBars = bd.totalItems ?? 0; }
+} catch {}
+
+// Bars favoris (tous)
+let barsFavori = [];
+try {
+  const favIds = Array.isArray(user.bar_favori) ? user.bar_favori : [];
+  if (favIds.length > 0) {
+    const filterStr = favIds.map(id => `id="${id}"`).join('||');
+    barsFavori = await getCollection('bar', { filter: filterStr, perPage: 200 });
+  }
+} catch {}
+
+// Jeux favoris (expand via getUserAuth)
+const jeuxFavori = (user.expand?.jeux_favori ?? []);
+
+// Boissons favorites (expand via getUserAuth)
+const boissonsFavori = (user.expand?.boisson_favori ?? []);
 
 // Invitations de session entrantes
-const demandeSession = user.invitations;
+const demandeSession = (user.expand?.demande_session ?? []).map(s => ({
+  id: s.id,
+  nom: s.nom ?? 'Session sans nom',
+  date: s.date_heur_depart?.split(' ')[0] ?? null,
+  hote: s.id_hote ?? null,
+}));
 
-// Demandes d'amis entrantes et amis
-const demandeAmies = user.demandes_amis;
-const amiesIds     = user.amis.map(a => a.id);
-const amiesExpand  = user.amis;
+// Demandes d'amis entrantes (expand already done in getUserAuth)
+const demandeAmies = (user.expand?.demande_amies ?? []).map(u => ({
+  id: u.id, collectionName: u.collectionName,
+  pseudo: u.pseudo ?? '', prenom: u.prenom ?? '', nom: u.nom ?? '',
+  avatar: u.avatar ?? null,
+}));
+const amiesIds    = Array.isArray(user.amies) ? user.amies : [];
+const amiesExpand = (user.expand?.amies ?? []).map(u => {
+  const decoRec = u.expand?.equiper_avatar_decoration ?? null;
+  const amiDecoUrl = decoRec?.type_decoration_avatar ? getImageUrl(decoRec, decoRec.type_decoration_avatar) : null;
+  return {
+    id: u.id, collectionName: u.collectionName,
+    pseudo: u.pseudo ?? '', prenom: u.prenom ?? '', nom: u.nom ?? '',
+    avatar: u.avatar ?? null, abonnements: u.abonnements ?? 'Gratuit',
+    decoUrl: amiDecoUrl,
+  };
+});
 
 // Tous les utilisateurs pour le modal ami (exclure soi-même)
+let allUsers = [];
+try {
+  const usersRes = await getCollection('users', { sort: 'pseudo', perPage: 200 });
+  allUsers = usersRes
+    .filter(u => u.id !== userId)
+    .map(u => ({
+      id: u.id, collectionName: u.collectionName,
+      pseudo: u.pseudo ?? '', prenom: u.prenom ?? '', nom: u.nom ?? '',
+      avatar: u.avatar ?? null,
+    }));
+} catch {}
+
+const avatarUrl    = user.avatar ? getImageUrl(user, user.avatar) : null;
 
 // Items boutique équipés
-const decoRecord    = user.equipes.decoration;
-const titreRecord   = user.equipes.titre;
-const themeRecord   = user.equipes.theme;
-const decoCle       = decoRecord?.image ?? null;
-const equippedTitre = titreRecord?.titre || titreRecord?.nom || null;
-const themeUrl      = urlFichier(themeRecord?.image);
+const decoRecord   = user.expand?.equiper_avatar_decoration ?? null;
+const titreRecord  = user.expand?.equiper_titre             ?? null;
+const themeRecord  = user.expand?.equiper_theme             ?? null;
+const decoUrl      = decoRecord?.type_decoration_avatar  ? getImageUrl(decoRecord,  decoRecord.type_decoration_avatar) : null;
+const equippedTitre = titreRecord?.type_titre ?? null;
+const themeUrl     = themeRecord?.type_them              ? getImageUrl(themeRecord, themeRecord.type_them)             : null;
 
 // Inventaire boutique
-const possedDecorations = user.possedes.decoration_avatar.map(item => ({
-  id: item.id, nom: item.nom ?? '', image: item.image,
+const possedDecorations = (user.expand?.possed_avatar_decoration ?? []).map(item => ({
+  id: item.id, nom: item.nom ?? '',
+  imageUrl: item.type_decoration_avatar ? getImageUrl(item, item.type_decoration_avatar) : null,
   isEquipped: decoRecord?.id === item.id,
 }));
-const possedTitres = user.possedes.titre.map(item => ({
-  id: item.id, nom: item.nom ?? '', type_titre: item.titre ?? '',
+const possedTitres = (user.expand?.possed_titre ?? []).map(item => ({
+  id: item.id, nom: item.nom ?? '', type_titre: item.type_titre ?? '',
   isEquipped: titreRecord?.id === item.id,
 }));
-const possedThemes = user.possedes.theme.map(item => ({
-  id: item.id, nom: item.nom ?? '', image: item.image,
+const possedThemes = (user.expand?.possed_theme ?? []).map(item => ({
+  id: item.id, nom: item.nom ?? '',
+  imageUrl: item.type_them ? getImageUrl(item, item.type_them) : null,
   isEquipped: themeRecord?.id === item.id,
 }));
-const itemsFavori = user.favoris.articles.map(item => ({
+const itemsFavori = (user.expand?.items_favori ?? []).map(item => ({
   id: item.id, nom: item.nom ?? '', type: item.type ?? '',
-  image: item.type === 'titre' ? null : item.image,
-  type_titre: item.titre ?? '',
+  imageUrl: item.type === 'decoration_avatar' ? (item.type_decoration_avatar ? getImageUrl(item, item.type_decoration_avatar) : null)
+          : item.type === 'theme'             ? (item.type_them              ? getImageUrl(item, item.type_them)              : null)
+          : null,
+  type_titre: item.type_titre ?? '',
 }));
 
-const createdAt    = user.cree_le
-  ? new Date(user.cree_le).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+const createdAt    = user.created
+  ? new Date(user.created).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
   : '—';
 const unreadNotifs = notifications.filter(n => !n.lu).length;
 
@@ -110,8 +241,8 @@ const displayName = user.prenom
         <div class="absolute rounded-full" style="width:100px; height:100px; top:50%; left:50%; transform:translate(-50%,-50%);">
           <div class="absolute inset-0 rounded-full" style="border: 8px solid #dfdfdf; z-index:1;"></div>
           <div class="absolute inset-2 rounded-full overflow-hidden" style="z-index:2;">
-            {user.avatar
-              ? <ImageFichier cle={user.avatar} alt="Avatar" class="w-full h-full object-cover" />
+            {avatarUrl
+              ? <PbImage src={avatarUrl} alt="Avatar" class="w-full h-full object-cover" />
               : <div class="w-full h-full bg-neutral-800 flex items-center justify-center">
                   <span class="text-white font-bold" style="font-size: 36px;">
                     {(user.pseudo || user.email || '?')[0].toUpperCase()}
@@ -121,9 +252,9 @@ const displayName = user.prenom
           </div>
         </div>
         <!-- Décoration : remplit le conteneur de 200px (2× la taille de l'avatar) -->
-        {decoCle && (
+        {decoUrl && (
           <div class="absolute inset-0 pointer-events-none" style="z-index:3;">
-            <ImageFichier cle={decoCle} alt="" class="w-full h-full object-contain" />
+            <PbImage src={decoUrl} alt="" class="w-full h-full object-contain" />
           </div>
         )}
       </div>
@@ -133,8 +264,8 @@ const displayName = user.prenom
       )}
       <div class="flex items-center justify-center gap-2 mt-1">
         <h3 class="m-0 text-primary-500">{user.pseudo ?? ''}</h3>
-        {user.abonnement === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={24} height={24} />}
-        {user.abonnement === 'Premium' && <Image src={badgePremium} alt="Premium" width={24} height={24} />}
+        {user.abonnements === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={24} height={24} />}
+        {user.abonnements === 'Premium' && <Image src={badgePremium} alt="Premium" width={24} height={24} />}
       </div>
       <p class="m-0 mt-2 text-center text-neutral-800 text-4 font-medium">{amiesIds.length} ami(e)s</p>
       <div class="mt-3 h-12.5 bg-primary-900 rounded-1.25 flex items-center justify-center gap-4">
@@ -157,8 +288,8 @@ const displayName = user.prenom
         <div class="absolute inset-0 rounded-full" style="border: 15px solid #dfdfdf; z-index:1;"></div>
         <!-- Photo (inset = épaisseur du border) -->
         <div class="absolute inset-3.75 rounded-full overflow-hidden" style="z-index:2;">
-          {user.avatar
-            ? <ImageFichier cle={user.avatar} alt="Avatar" class="w-full h-full object-cover" />
+          {avatarUrl
+            ? <PbImage src={avatarUrl} alt="Avatar" class="w-full h-full object-cover" />
             : <div class="w-full h-full bg-neutral-800 flex items-center justify-center">
                 <span class="text-white font-bold" style="font-size: 60px;">
                   {(user.pseudo || user.email || '?')[0].toUpperCase()}
@@ -168,9 +299,9 @@ const displayName = user.prenom
         </div>
       </div>
       <!-- Décoration desktop : 218px centrés sur l'avatar (187px), légèrement plus bas -->
-      {decoCle && (
+      {decoUrl && (
         <div class="absolute pointer-events-none" style="z-index:5; width:224px; height:224px; left:calc(80px - 20px); top:calc(119px - 18px + 5px);">
-          <ImageFichier cle={decoCle} alt="" class="w-full h-full object-contain" />
+          <PbImage src={decoUrl} alt="" class="w-full h-full object-contain" />
         </div>
       )}
       <!-- Nom -->
@@ -181,8 +312,8 @@ const displayName = user.prenom
       <!-- Pseudo -->
       <div class="absolute flex items-center gap-2" style="left: calc(16.67% + 59px); top: 185px;">
         <h3 class="m-0 text-primary-500">{user.pseudo ?? ''}</h3>
-        {user.abonnement === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={28} height={28} />}
-        {user.abonnement === 'Premium' && <Image src={badgePremium} alt="Premium" width={28} height={28} />}
+        {user.abonnements === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={28} height={28} />}
+        {user.abonnements === 'Premium' && <Image src={badgePremium} alt="Premium" width={28} height={28} />}
       </div>
       <!-- Titre équipé -->
       {equippedTitre && (
@@ -242,23 +373,23 @@ const displayName = user.prenom
                   <div class="relative shrink-0" style="width:96px; height:96px;">
                     <div class="absolute rounded-full overflow-hidden" style="width:64px; height:64px; top:50%; left:50%; transform:translate(-50%,-50%); z-index:1;">
                       {ami.avatar
-                        ? <ImageFichier cle={ami.avatar} alt={ami.pseudo} class="w-full h-full object-cover" />
+                        ? <PbImage record={ami} recordImage={ami.avatar} alt={ami.pseudo} class="w-full h-full object-cover" />
                         : <div class="w-full h-full bg-primary-600 flex items-center justify-center">
                             <span class="text-white font-bold text-6">{(ami.pseudo || ami.prenom || '?')[0].toUpperCase()}</span>
                           </div>
                       }
                     </div>
-                    {ami.decoration && (
+                    {ami.decoUrl && (
                       <div class="absolute inset-0 pointer-events-none" style="z-index:2;">
-                        <ImageFichier cle={ami.decoration} alt="" class="w-full h-full object-contain" />
+                        <PbImage src={ami.decoUrl} alt="" class="w-full h-full object-contain" />
                       </div>
                     )}
                   </div>
                   <div class="min-w-0">
                     <div class="flex items-center gap-1.5">
                       <p class="text-white font-bold text-4 m-0 truncate">{ami.pseudo || ''}</p>
-                      {ami.abonnement === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={18} height={18} class="shrink-0" />}
-                      {ami.abonnement === 'Premium' && <Image src={badgePremium} alt="Premium" width={18} height={18} class="shrink-0" />}
+                      {ami.abonnements === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={18} height={18} class="shrink-0" />}
+                      {ami.abonnements === 'Premium' && <Image src={badgePremium} alt="Premium" width={18} height={18} class="shrink-0" />}
                     </div>
                     <p class="text-neutral-300 text-3.5 font-medium m-0 truncate">{`${ami.prenom ?? ''} ${ami.nom ?? ''}`.trim()}</p>
                   </div>
@@ -321,7 +452,8 @@ const displayName = user.prenom
         <div id="panel-profil" data-panel class={activeTab !== 'profil' ? 'hidden' : ''}>
           <div class="px-4 lg:px-20 pt-8 lg:pt-11.25 pb-16 lg:pb-30">
 
-            <p id="profile-msg" class="hidden text-sm font-medium mb-6 m-0" role="status"></p>
+            {updateSuccess && <p class="text-primary-600 text-sm font-medium mb-6 m-0">Profil mis à jour avec succès.</p>}
+            {updateError   && <p class="text-red-500 text-sm font-medium mb-6 m-0">{updateError}</p>}
 
             <!-- H2 Données du compte + ligne décorative -->
             <div class="flex items-center gap-7.5 mb-11.25">
@@ -329,7 +461,8 @@ const displayName = user.prenom
               <div class="flex-1 h-0.5 bg-neutral-300"></div>
             </div>
 
-            <form id="profile-form">
+            <form method="POST" enctype="multipart/form-data" id="profile-form">
+              <input type="hidden" name="_action" value="edit" />
 
               <!-- Box 1 : Informations personnelles -->
               <div class="bg-white border-0.75 border-neutral-300 rounded-2.5 px-4 lg:px-7.5 py-5.5 mb-4.5">
@@ -344,7 +477,7 @@ const displayName = user.prenom
                   <div class="flex flex-col gap-1">
                     <span class="text-neutral-500 text-4 font-medium leading-snug">Âge</span>
                     <span class="view-field text-black text-4 font-medium leading-snug">{user.age ? `${user.age} ans` : '—'}</span>
-                    <input type="number" name="age" value={user.age ?? ''} placeholder="Âge" min="18" max="120"
+                    <input type="number" name="age" value={user.age ?? ''} placeholder="Âge" min="13" max="120"
                       class="edit-field hidden text-4 font-medium text-neutral-800 bg-neutral-200 border border-neutral-300 rounded px-3 py-1 outline-none w-25" />
                   </div>
                   <div class="flex flex-col gap-1">
@@ -394,9 +527,9 @@ const displayName = user.prenom
                     <span class="text-neutral-500 text-4 font-medium leading-snug">Facebook</span>
                     <div class="view-field flex items-center gap-2">
                       <Image src={facebookIcon} alt="" width={18} height={18} />
-                      <span class="text-black text-4 font-medium leading-snug">{user.facebook || '—'}</span>
+                      <span class="text-black text-4 font-medium leading-snug">{user.facbook || '—'}</span>
                     </div>
-                    <input type="text" name="facebook" value={user.facebook ?? ''} placeholder="Nom Facebook"
+                    <input type="text" name="facbook" value={user.facbook ?? ''} placeholder="Nom Facebook"
                       class="edit-field hidden text-4 font-medium text-neutral-800 bg-neutral-200 border border-neutral-300 rounded px-3 py-1 outline-none w-40" />
                   </div>
                   <div class="flex flex-col gap-1">
@@ -460,7 +593,7 @@ const displayName = user.prenom
                 {barsFavori.map(bar => (
                   <div class="relative bg-white rounded-0.5 h-87.75 shadow-md">
                     <div class="absolute top-0 left-0 right-0 h-50 overflow-hidden rounded-tl-0.5 rounded-tr-0.5">
-                      <ImageFichier cle={bar.image} width={280} height={200} class="w-full h-full object-cover" />
+                      <PbImage record={bar} recordImage={bar.img?.[0]} width={280} height={200} class="w-full h-full object-cover" />
                     </div>
                     <h3 class="absolute top-52.5 left-4.75 right-4.75 m-0 text-black">{bar.nom}</h3>
                     <button class="like-btn-bar absolute bottom-5.25 right-5.25 w-6 h-6 flex items-center justify-center bg-transparent border-0 cursor-pointer p-0" data-id={bar.id} type="button" aria-label="Retirer des favoris">
@@ -487,10 +620,11 @@ const displayName = user.prenom
             {jeuxFavori.length > 0 ? (
               <div class="grid grid-cols-1 lg:grid-cols-3 gap-8.25">
                 {jeuxFavori.map(jeu => {
+                  const imgFile = Array.isArray(jeu.img) ? jeu.img[0] : jeu.img;
                   return (
                     <div class="relative bg-white rounded-0.5 h-87.75 shadow-md">
                       <div class="absolute top-0 left-0 right-0 h-50 overflow-hidden rounded-tl-0.5 rounded-tr-0.5">
-                        <ImageFichier cle={jeu.image} width={280} height={200} class="w-full h-full object-cover" />
+                        <PbImage record={jeu} recordImage={imgFile} width={280} height={200} class="w-full h-full object-cover" />
                       </div>
                       <h3 class="absolute top-52.5 left-4.75 right-4.75 m-0 text-black">{jeu.nom}</h3>
                       <button class="like-btn-jeux absolute bottom-5.25 right-5.25 w-6 h-6 flex items-center justify-center bg-transparent border-0 cursor-pointer p-0" data-id={jeu.id} type="button" aria-label="Retirer des favoris">
@@ -520,7 +654,7 @@ const displayName = user.prenom
                 {boissonsFavori.map(b => (
                   <div class="relative bg-white rounded-0.5 shadow-md" style="height: 270px;">
                     <div class="absolute top-0 left-0 right-0 h-44 overflow-hidden rounded-tl-0.5 rounded-tr-0.5 bg-neutral-500">
-                      <ImageFichier cle={b.image} alt={b.nom} class="w-full h-full object-cover" />
+                      <PbImage record={b} recordImage={b.img} alt={b.nom} class="w-full h-full object-cover" />
                     </div>
                     <h3 class="absolute left-4.75 right-4.75 m-0 text-black truncate" style="top: 190px;">{b.nom}</h3>
                   </div>
@@ -552,7 +686,7 @@ const displayName = user.prenom
                     <div class="friend-request-item flex items-center gap-4 p-5 bg-white rounded-2.5 border-0.75 border-primary-500" data-friend-id={requester.id}>
                       <div class="w-12 h-12 rounded-full overflow-hidden shrink-0 bg-neutral-800 flex items-center justify-center">
                         {requester.avatar
-                          ? <ImageFichier cle={requester.avatar} alt="" class="w-full h-full object-cover" />
+                          ? <PbImage record={requester} recordImage={requester.avatar} alt="" class="w-full h-full object-cover" />
                           : <span class="text-white font-bold text-5">{(requester.pseudo || requester.prenom || '?')[0].toUpperCase()}</span>
                         }
                       </div>
@@ -609,7 +743,7 @@ const displayName = user.prenom
                     </div>
                     <div class="flex-1">
                       <p class={`text-4 m-0 leading-snug ${!notif.lu ? 'font-bold' : 'font-medium'} text-black`}>
-                        {notif.texte || 'Notification'}
+                        {notif.message ?? notif.texte ?? notif.contenu ?? 'Notification'}
                       </p>
                       <p class="text-sm text-neutral-500 m-0 mt-1">{timeAgo(notif.created)}</p>
                     </div>
@@ -680,9 +814,9 @@ const displayName = user.prenom
                                   <div class="size-20 rounded-full bg-primary-900 flex items-center justify-center px-2">
                                     <p class="text-white font-bold text-3 text-center m-0 leading-snug">{item.type_titre || item.nom}</p>
                                   </div>
-                                ) : item.image ? (
+                                ) : item.imageUrl ? (
                                   <div class="size-20 rounded-full overflow-hidden">
-                                    <ImageFichier cle={item.image} alt={item.nom} class="w-full h-full object-cover" />
+                                    <PbImage src={item.imageUrl} alt={item.nom} class="w-full h-full object-cover" />
                                   </div>
                                 ) : (
                                   <div class="size-20 rounded-full bg-neutral-600"></div>
@@ -731,9 +865,9 @@ const displayName = user.prenom
                       {possedDecorations.map(item => (
                         <div data-inv-card={item.id} class={`bg-white rounded-0.5 shadow-sm overflow-hidden relative${item.isEquipped ? ' ring-2 ring-primary-500' : ''}`}>
                           <div class="h-36 lg:h-44 bg-neutral-500 flex items-center justify-center relative">
-                            {item.image ? (
+                            {item.imageUrl ? (
                               <div class="size-20 rounded-full overflow-hidden">
-                                <ImageFichier cle={item.image} alt={item.nom} class="w-full h-full object-cover" />
+                                <PbImage src={item.imageUrl} alt={item.nom} class="w-full h-full object-cover" />
                               </div>
                             ) : (
                               <div class="size-20 rounded-full bg-neutral-600"></div>
@@ -803,9 +937,9 @@ const displayName = user.prenom
                       {possedThemes.map(item => (
                         <div data-inv-card={item.id} class={`bg-white rounded-0.5 shadow-sm overflow-hidden relative${item.isEquipped ? ' ring-2 ring-primary-500' : ''}`}>
                           <div class="h-36 lg:h-44 bg-neutral-500 flex items-center justify-center relative">
-                            {item.image ? (
+                            {item.imageUrl ? (
                               <div class="size-20 rounded-full overflow-hidden">
-                                <ImageFichier cle={item.image} alt={item.nom} class="w-full h-full object-cover" />
+                                <PbImage src={item.imageUrl} alt={item.nom} class="w-full h-full object-cover" />
                               </div>
                             ) : (
                               <div class="size-20 rounded-full bg-neutral-600"></div>
@@ -868,16 +1002,13 @@ const displayName = user.prenom
                 <span class="text-4 font-medium text-black w-28 lg:w-40 shrink-0">Email actuel</span>
                 <span class="text-4 font-medium text-neutral-500 truncate min-w-0">{user.email ?? '—'}</span>
               </div>
-              <p id="email-msg" class="hidden text-sm font-medium mb-4 m-0" role="status"></p>
-              <form id="email-form" class="flex flex-col lg:flex-row lg:items-end gap-4">
+              {emailSuccess && <p class="text-primary-600 text-sm font-medium mb-4 m-0">Email mis à jour.</p>}
+              {emailError   && <p class="text-red-500 text-sm font-medium mb-4 m-0">{emailError}</p>}
+              <form method="POST" enctype="application/x-www-form-urlencoded" class="flex flex-col lg:flex-row lg:items-end gap-4">
+                <input type="hidden" name="_action" value="change_email" />
                 <div class="flex-1">
                   <label class="block text-4 font-medium text-black mb-2">Nouvel email</label>
-                  <input type="email" name="new_email" placeholder="nouveau@email.com" required
-                    class="w-full text-4 font-medium bg-neutral-200 border-2 border-neutral-300 rounded px-4 py-2 outline-none" />
-                </div>
-                <div class="flex-1">
-                  <label class="block text-4 font-medium text-black mb-2">Mot de passe actuel</label>
-                  <input type="password" name="password" placeholder="••••••••" required autocomplete="current-password"
+                  <input type="email" name="new_email" placeholder="nouveau@email.com"
                     class="w-full text-4 font-medium bg-neutral-200 border-2 border-neutral-300 rounded px-4 py-2 outline-none" />
                 </div>
                 <button type="submit"
@@ -890,8 +1021,10 @@ const displayName = user.prenom
             <!-- Mot de passe -->
             <h3 class="text-black m-0 mb-5">Sécurité</h3>
             <div class="bg-white border-0.75 border-neutral-300 rounded-2.5 px-7.5 py-5.5 mb-8">
-              <p id="pwd-msg" class="hidden text-sm font-medium mb-4 m-0" role="status"></p>
-              <form id="pwd-form" class="flex flex-col gap-5">
+              {pwdSuccess && <p class="text-primary-600 text-sm font-medium mb-4 m-0">Mot de passe modifié.</p>}
+              {pwdError   && <p class="text-red-500 text-sm font-medium mb-4 m-0">{pwdError}</p>}
+              <form method="POST" enctype="application/x-www-form-urlencoded" class="flex flex-col gap-5">
+                <input type="hidden" name="_action" value="change_password" />
                 <div>
                   <label class="block text-4 font-medium text-black mb-2">Mot de passe actuel</label>
                   <input type="password" name="old_password" placeholder="••••••••"
@@ -922,8 +1055,9 @@ const displayName = user.prenom
               <p class="text-4 font-medium text-black m-0 mb-4">
                 Connecté en tant que <span class="text-primary-500">{user.pseudo ?? user.email}</span>
               </p>
-              <form method="POST" action="/deconnexion" enctype="application/x-www-form-urlencoded">
-                                <button type="submit"
+              <form method="POST" enctype="application/x-www-form-urlencoded">
+                <input type="hidden" name="_action" value="logout" />
+                <button type="submit"
                   class="inline-flex items-center gap-3 border-2 border-neutral-800 text-neutral-800 text-4 font-medium px-8 py-2.25 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer bg-transparent rounded">
                   Se déconnecter
                 </button>
@@ -938,10 +1072,8 @@ const displayName = user.prenom
                   <p class="text-4 font-medium text-black m-0">Supprimer mon compte</p>
                   <p class="text-sm text-neutral-500 m-0 mt-1">Action irréversible. Toutes vos données seront supprimées définitivement.</p>
                 </div>
-                <form id="delete-form" class="shrink-0 flex flex-col gap-2 items-end">
-                  <input type="password" id="delete-password" placeholder="Mot de passe" autocomplete="current-password"
-                    class="hidden w-full text-4 font-medium bg-neutral-200 border-2 border-neutral-300 rounded px-4 py-2 outline-none" />
-                  <p id="delete-msg" class="hidden text-sm font-medium text-red-500 m-0" role="alert"></p>
+                <form method="POST" enctype="application/x-www-form-urlencoded" id="delete-form" class="shrink-0">
+                  <input type="hidden" name="_action" value="delete" />
                   <button type="button" id="delete-btn"
                     class="inline-flex items-center gap-2 border-2 border-red-500 text-red-500 text-4 font-medium px-6 py-2.25 hover:bg-red-500 hover:text-white transition-colors cursor-pointer bg-transparent rounded">
                     Supprimer
@@ -983,23 +1115,23 @@ const displayName = user.prenom
                     <div class="relative shrink-0" style="width:84px; height:84px;">
                       <div class="absolute rounded-full overflow-hidden" style="width:56px; height:56px; top:50%; left:50%; transform:translate(-50%,-50%); z-index:1;">
                         {ami.avatar
-                          ? <ImageFichier cle={ami.avatar} alt={ami.pseudo} class="w-full h-full object-cover" />
+                          ? <PbImage record={ami} recordImage={ami.avatar} alt={ami.pseudo} class="w-full h-full object-cover" />
                           : <div class="w-full h-full bg-primary-600 flex items-center justify-center">
                               <span class="text-white font-bold text-5">{(ami.pseudo || ami.prenom || '?')[0].toUpperCase()}</span>
                             </div>
                         }
                       </div>
-                      {ami.decoration && (
+                      {ami.decoUrl && (
                         <div class="absolute inset-0 pointer-events-none" style="z-index:2;">
-                          <ImageFichier cle={ami.decoration} alt="" class="w-full h-full object-contain" />
+                          <PbImage src={ami.decoUrl} alt="" class="w-full h-full object-contain" />
                         </div>
                       )}
                     </div>
                     <div class="min-w-0">
                       <div class="flex items-center gap-1.5">
                         <p class="text-neutral-800 font-bold text-4 m-0 truncate">{ami.pseudo || ''}</p>
-                        {ami.abonnement === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={18} height={18} class="shrink-0" />}
-                        {ami.abonnement === 'Premium' && <Image src={badgePremium} alt="Premium" width={18} height={18} class="shrink-0" />}
+                        {ami.abonnements === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={18} height={18} class="shrink-0" />}
+                        {ami.abonnements === 'Premium' && <Image src={badgePremium} alt="Premium" width={18} height={18} class="shrink-0" />}
                       </div>
                       <p class="text-neutral-500 text-3.5 font-medium m-0 truncate">{`${ami.prenom ?? ''} ${ami.nom ?? ''}`.trim()}</p>
                     </div>
@@ -1035,9 +1167,11 @@ const displayName = user.prenom
     </div>
   </div>
 
+  <script id="friend-data" type="application/json" set:html={JSON.stringify({ allUsers, amiesIds, userId })}></script>
+
   <div id="auth-meta" data-user-id={userId} hidden></div>
 
-  <script is:inline define:vars={{ activeTab, userId, decoId: decoRecord?.id ?? null, titreId: titreRecord?.id ?? null, themeId: themeRecord?.id ?? null }}>
+  <script is:inline define:vars={{ activeTab, userId, decoRecord, titreRecord, themeRecord }}>
     // profil.js — onglets + mode édition
     function moveIndicator(btn) {
       var indicator = document.getElementById('tab-indicator');
@@ -1083,102 +1217,11 @@ const displayName = user.prenom
       if (cancelBtn) cancelBtn.style.display = 'none';
     }
 
-    // ── Appels API (cookie de session envoyé automatiquement, aucun token) ──
-    async function api(method, url, body) {
-      var opts = { method: method, headers: {} };
-      if (body instanceof FormData) {
-        opts.body = body;
-      } else if (body !== undefined) {
-        opts.headers['Content-Type'] = 'application/json';
-        opts.body = JSON.stringify(body);
+    function confirmDelete() {
+      if (confirm('Supprimer définitivement votre compte ? Cette action est irréversible.')) {
+        var form = document.getElementById('delete-form');
+        if (form) form.submit();
       }
-      var res = await fetch(url, opts);
-      var data = null;
-      try { data = await res.json(); } catch (_) {}
-      return { ok: res.ok, status: res.status, data: data };
-    }
-
-    function showMsg(id, text, ok) {
-      var el = document.getElementById(id);
-      if (!el) return;
-      el.textContent = text;
-      el.classList.remove('hidden', 'text-primary-600', 'text-red-500');
-      el.classList.add(ok ? 'text-primary-600' : 'text-red-500');
-    }
-
-    // ── Formulaire profil : PATCH /api/profil puis POST /api/profil/avatar ──
-    var profileForm = document.getElementById('profile-form');
-    if (profileForm) {
-      profileForm.addEventListener('submit', async function (e) {
-        e.preventDefault();
-        var fd = new FormData(profileForm);
-        var body = {};
-        ['prenom', 'nom', 'pseudo', 'ville', 'insta', 'facebook', 'discord', 'description'].forEach(function (k) {
-          var v = fd.get(k);
-          if (v !== null) body[k] = String(v);
-        });
-        var age = String(fd.get('age') || '').trim();
-        body.age = age === '' ? null : Number(age);
-        var r = await api('PATCH', '/api/profil', body);
-        if (!r.ok) { showMsg('profile-msg', (r.data && r.data.error) || 'Erreur lors de la mise à jour.', false); return; }
-        var file = fd.get('avatar');
-        if (file instanceof File && file.size > 0) {
-          var af = new FormData();
-          af.append('avatar', file);
-          var ra = await api('POST', '/api/profil/avatar', af);
-          if (!ra.ok) { showMsg('profile-msg', (ra.data && ra.data.error) || "Erreur lors de l'envoi de la photo.", false); return; }
-        }
-        showMsg('profile-msg', 'Profil mis à jour avec succès.', true);
-        setTimeout(function () { window.location.href = '/profil'; }, 600);
-      });
-    }
-
-    // ── Changement d'e-mail ──
-    var emailForm = document.getElementById('email-form');
-    if (emailForm) {
-      emailForm.addEventListener('submit', async function (e) {
-        e.preventDefault();
-        var fd = new FormData(emailForm);
-        var r = await api('POST', '/api/compte/email', { email: String(fd.get('new_email') || ''), mot_de_passe: String(fd.get('password') || '') });
-        if (!r.ok) { showMsg('email-msg', (r.data && r.data.error) || 'Erreur lors de la mise à jour.', false); return; }
-        showMsg('email-msg', 'Email mis à jour.', true);
-        setTimeout(function () { window.location.href = '/profil?tab=parametres'; }, 600);
-      });
-    }
-
-    // ── Changement de mot de passe ──
-    var pwdForm = document.getElementById('pwd-form');
-    if (pwdForm) {
-      pwdForm.addEventListener('submit', async function (e) {
-        e.preventDefault();
-        var fd = new FormData(pwdForm);
-        var ancien = String(fd.get('old_password') || '');
-        var nouveau = String(fd.get('new_password') || '');
-        var confirmation = String(fd.get('confirm_password') || '');
-        if (!ancien || !nouveau || !confirmation) { showMsg('pwd-msg', 'Tous les champs sont requis.', false); return; }
-        if (nouveau !== confirmation) { showMsg('pwd-msg', 'Les mots de passe ne correspondent pas.', false); return; }
-        if (nouveau.length < 8) { showMsg('pwd-msg', 'Le mot de passe doit contenir au moins 8 caractères.', false); return; }
-        var r = await api('POST', '/api/compte/mot-de-passe', { ancien: ancien, nouveau: nouveau });
-        if (!r.ok) { showMsg('pwd-msg', (r.data && r.data.error) || 'Mot de passe actuel incorrect.', false); return; }
-        pwdForm.reset();
-        showMsg('pwd-msg', 'Mot de passe modifié.', true);
-      });
-    }
-
-    // ── Suppression du compte : 1er clic = champ mot de passe, 2e clic = envoi ──
-    async function confirmDelete() {
-      var pwd = document.getElementById('delete-password');
-      if (!pwd) return;
-      if (pwd.classList.contains('hidden')) {
-        pwd.classList.remove('hidden');
-        pwd.focus();
-        return;
-      }
-      if (!pwd.value) { showMsg('delete-msg', 'Saisissez votre mot de passe.', false); return; }
-      if (!confirm('Supprimer définitivement votre compte ? Cette action est irréversible.')) return;
-      var r = await api('POST', '/api/compte/supprimer', { mot_de_passe: pwd.value });
-      if (!r.ok) { showMsg('delete-msg', (r.data && r.data.error) || 'Erreur lors de la suppression.', false); return; }
-      window.location.href = '/';
     }
 
     document.querySelectorAll('[data-tab]').forEach(function(btn) {
@@ -1209,12 +1252,12 @@ const displayName = user.prenom
     // inventaire.js
     (function () {
       var equipped = {
-        decoration_avatar: decoId,
-        titre: titreId,
-        theme: themeId,
+        decoration_avatar: decoRecord ? decoRecord.id : null,
+        titre: titreRecord ? titreRecord.id : null,
+        theme: themeRecord ? themeRecord.id : null,
       };
 
-      var TYPES = { decoration_avatar: true, titre: true, theme: true };
+      var EQUIP_FIELD = { decoration_avatar: 'equiper_avatar_decoration', titre: 'equiper_titre', theme: 'equiper_theme' };
 
       function showToast(msg, ok) {
         var toast = document.getElementById('inv-toast');
@@ -1239,14 +1282,15 @@ const displayName = user.prenom
       async function equipItem(btn) {
         var itemId   = btn.dataset.itemId;
         var itemType = btn.dataset.itemType;
-        if (!TYPES[itemType] || !userId) return;
+        var field    = EQUIP_FIELD[itemType];
+        if (!field || !userId) return;
         btn.disabled = true;
         btn.textContent = '...';
         try {
-          var res = await fetch('/api/boutique/equiper', {
-            method: 'POST',
+          var res = await fetch('/api/pb/collections/users/records/' + userId, {
+            method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ article_id: itemId }),
+            body: JSON.stringify({ [field]: itemId }),
           });
           if (!res.ok) throw new Error();
           var oldId = equipped[itemType];
@@ -1264,14 +1308,15 @@ const displayName = user.prenom
       async function unequipItem(btn) {
         var itemId   = btn.dataset.itemId;
         var itemType = btn.dataset.itemType;
-        if (!TYPES[itemType] || !userId) return;
+        var field    = EQUIP_FIELD[itemType];
+        if (!field || !userId) return;
         btn.disabled = true;
         btn.textContent = '...';
         try {
-          var res = await fetch('/api/boutique/desequiper', {
-            method: 'POST',
+          var res = await fetch('/api/pb/collections/users/records/' + userId, {
+            method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: itemType }),
+            body: JSON.stringify({ [field]: '' }),
           });
           if (!res.ok) throw new Error();
           equipped[itemType] = null;

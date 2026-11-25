@@ -2,9 +2,8 @@
 // @ts-nocheck
 import Layout from '../../layouts/Layout.astro';
 import { Image } from 'astro:assets';
-import { getUtilisateurPublic, etatAmitie, compterAmis, getFavorisPublics, getDateCreationProfil } from '../../lib/db.ts';
-import { urlFichier } from '../../lib/stockage.js';
-import ImageFichier from '../../components/ImageFichier.astro';
+import { PB_URL, getImageUrl, getCollection } from '../../../backend/backend.js';
+import PbImage from '../../components/PbImage.astro';
 import checkIcon      from '../../assets/icon/check.svg';
 import userRemoveIcon from '../../assets/icon/user_remove.svg';
 import likeIcon       from '../../assets/icon/like.svg';
@@ -17,36 +16,89 @@ import badgePremium from '../../assets/icon/badge_pernuim.svg';
 import panierIcon         from '../../assets/icon/panier.svg';
 import swatchesPaletteIcon from '../../assets/icon/swatches_palette.svg';
 
-const user = Astro.locals.user;
-if (!user) return Astro.redirect('/connexion?redirect=' + encodeURIComponent(Astro.url.pathname));
-const userId = user.id;
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+if (!token || !userId) return Astro.redirect('/connexion');
 
 const { id } = Astro.params;
 if (id === userId) return Astro.redirect('/profil');
 
-// Profil public de la cible (jamais d'e-mail)
-const u = getUtilisateurPublic(id);
-if (!u) return new Response(null, { status: 404 });
+// Charger le profil cible
+let u;
+try {
+  const res = await fetch(
+    `${PB_URL}/api/collections/users/records/${id}?expand=equiper_avatar_decoration,equiper_titre,equiper_theme`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) return Astro.redirect('/profil');
+  u = await res.json();
+} catch {
+  return Astro.redirect('/profil');
+}
 
-const decoKey       = u.decoration?.image ?? null;
-const equippedTitre = u.titre?.titre ?? null;
-const themeUrl      = urlFichier(u.theme?.image ?? null);
+const decoRecord    = u.expand?.equiper_avatar_decoration ?? null;
+const titreRecord   = u.expand?.equiper_titre             ?? null;
+const themeRecord   = u.expand?.equiper_theme             ?? null;
+const decoUrl       = decoRecord?.type_decoration_avatar ? getImageUrl(decoRecord, decoRecord.type_decoration_avatar) : null;
+const equippedTitre = titreRecord?.type_titre ?? null;
+const themeUrl      = themeRecord?.type_them  ? getImageUrl(themeRecord, themeRecord.type_them) : null;
 
-// État d'amitié avec l'utilisateur connecté
-const etat = etatAmitie(userId, id);
-const isAlreadyFriend         = etat === 'ami';
-const requestSentByMe         = etat === 'envoyee';
-const requestReceivedFromThem = etat === 'recue';
+// Charger mon propre profil
+let meRes;
+try {
+  meRes = await fetch(
+    `${PB_URL}/api/collections/users/records/${userId}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+} catch {
+  meRes = { ok: false };
+}
+const me = meRes.ok ? await meRes.json() : {};
 
-const amiesCount  = compterAmis(id);
+const myAmies       = Array.isArray(me.amies)         ? me.amies         : [];
+const myDemandes    = Array.isArray(me.demande_amies)  ? me.demande_amies  : [];
+const theirDemandes = Array.isArray(u.demande_amies)   ? u.demande_amies   : [];
+
+const isAlreadyFriend         = myAmies.includes(id);
+const requestSentByMe         = theirDemandes.includes(userId);
+const requestReceivedFromThem = myDemandes.includes(id);
+
+const amiesCount  = Array.isArray(u.amies) ? u.amies.length : 0;
+const avatarUrl   = u.avatar ? getImageUrl(u, u.avatar) : null;
 const displayName = [u.prenom, u.nom].filter(Boolean).join(' ') || u.pseudo || 'Utilisateur';
-const dateCreation = getDateCreationProfil(id);
-const createdAt   = dateCreation
-  ? new Date(dateCreation).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+const createdAt   = u.created
+  ? new Date(u.created).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
   : '—';
 
-// Favoris de l'utilisateur cible
-const { bars: barsFavori, jeux: jeuxFavori, boissons: boissonsFavori } = getFavorisPublics(id);
+// Bars favoris de l'utilisateur cible
+let barsFavori = [];
+try {
+  const favIds = Array.isArray(u.bar_favori) ? u.bar_favori : [];
+  if (favIds.length > 0) {
+    const filterStr = favIds.map(bid => `id="${bid}"`).join('||');
+    barsFavori = await getCollection('bar', { filter: filterStr, perPage: 200 });
+  }
+} catch {}
+
+// Jeux favoris de l'utilisateur cible
+let jeuxFavori = [];
+try {
+  const jeuxIds = Array.isArray(u.jeux_favori) ? u.jeux_favori : [];
+  if (jeuxIds.length > 0) {
+    const filterStr = jeuxIds.map(jid => `id="${jid}"`).join('||');
+    jeuxFavori = await getCollection('jeux', { filter: filterStr, perPage: 200 });
+  }
+} catch {}
+
+// Boissons favorites de l'utilisateur cible
+let boissonsFavori = [];
+try {
+  const boissonIds = Array.isArray(u.boisson_favori) ? u.boisson_favori : [];
+  if (boissonIds.length > 0) {
+    const filterStr = boissonIds.map(bid => `id="${bid}"`).join('||');
+    boissonsFavori = await getCollection('boison', { filter: filterStr, perPage: 200 });
+  }
+} catch {}
 
 // Tab actif
 const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
@@ -67,17 +119,17 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
         <div class="absolute rounded-full" style="width:100px; height:100px; top:50%; left:50%; transform:translate(-50%,-50%);">
           <div class="absolute inset-0 rounded-full" style="border: 8px solid #dfdfdf; z-index:1;"></div>
           <div class="absolute inset-2 rounded-full overflow-hidden" style="z-index:2;">
-            {u.avatar
-              ? <ImageFichier cle={u.avatar} alt="Avatar" class="w-full h-full object-cover" />
+            {avatarUrl
+              ? <PbImage src={avatarUrl} alt="Avatar" class="w-full h-full object-cover" />
               : <div class="w-full h-full bg-neutral-800 flex items-center justify-center">
                   <span class="text-white font-bold" style="font-size: 36px;">{displayName[0].toUpperCase()}</span>
                 </div>
             }
           </div>
         </div>
-        {decoKey && (
+        {decoUrl && (
           <div class="absolute inset-0 pointer-events-none" style="z-index:3;">
-            <ImageFichier cle={decoKey} alt="" class="w-full h-full object-contain" />
+            <PbImage src={decoUrl} alt="" class="w-full h-full object-contain" />
           </div>
         )}
       </div>
@@ -88,8 +140,8 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
       {u.pseudo && (
         <div class="flex items-center justify-center gap-2 mt-1">
           <h3 class="m-0 text-primary-500">{u.pseudo}</h3>
-          {u.abonnement === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={24} height={24} />}
-          {u.abonnement === 'Premium' && <Image src={badgePremium} alt="Premium" width={24} height={24} />}
+          {u.abonnements === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={24} height={24} />}
+          {u.abonnements === 'Premium' && <Image src={badgePremium} alt="Premium" width={24} height={24} />}
         </div>
       )}
       <p class="m-0 mt-2 text-center text-neutral-800 text-4 font-medium">{amiesCount} ami(e)s</p>
@@ -111,8 +163,8 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
       <div class="absolute left-20 top-29.75 size-46.75 rounded-full z-2">
         <div class="absolute inset-0 rounded-full" style="border: 15px solid #dfdfdf; z-index:1;"></div>
         <div class="absolute inset-3.75 rounded-full overflow-hidden" style="z-index:2;">
-          {u.avatar
-            ? <ImageFichier cle={u.avatar} alt="Avatar" class="w-full h-full object-cover" />
+          {avatarUrl
+            ? <PbImage src={avatarUrl} alt="Avatar" class="w-full h-full object-cover" />
             : <div class="w-full h-full bg-neutral-800 flex items-center justify-center">
                 <span class="text-white font-bold" style="font-size: 60px;">{displayName[0].toUpperCase()}</span>
               </div>
@@ -120,9 +172,9 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
         </div>
       </div>
       <!-- Décoration desktop -->
-      {decoKey && (
+      {decoUrl && (
         <div class="absolute pointer-events-none" style="z-index:5; width:224px; height:224px; left:calc(80px - 20px); top:calc(119px - 18px + 5px);">
-          <ImageFichier cle={decoKey} alt="" class="w-full h-full object-contain" />
+          <PbImage src={decoUrl} alt="" class="w-full h-full object-contain" />
         </div>
       )}
       <!-- Titre équipé -->
@@ -143,8 +195,8 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
       {u.pseudo && (
         <div class="absolute flex items-center gap-2" style="left: calc(16.67% + 59px); top: 185px;">
           <h3 class="m-0 text-primary-500">{u.pseudo}</h3>
-          {u.abonnement === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={28} height={28} />}
-          {u.abonnement === 'Premium' && <Image src={badgePremium} alt="Premium" width={28} height={28} />}
+          {u.abonnements === 'VIP'     && <Image src={badgeVip}     alt="VIP"     width={28} height={28} />}
+          {u.abonnements === 'Premium' && <Image src={badgePremium} alt="Premium" width={28} height={28} />}
         </div>
       )}
       <!-- Ami(e)s -->
@@ -222,7 +274,7 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
           )}
 
           <!-- Réseaux sociaux -->
-          {(u.insta || u.facebook || u.discord) && (
+          {(u.insta || u.facbook || u.discord) && (
             <div class="mt-4 flex flex-col gap-4">
               <p class="text-neutral-400 text-3 font-medium uppercase tracking-widest m-0">Réseaux sociaux</p>
               {u.insta && (
@@ -233,12 +285,12 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
                   <span class="text-neutral-300 text-3.5 font-medium">@{u.insta}</span>
                 </div>
               )}
-              {u.facebook && (
+              {u.facbook && (
                 <div class="flex items-center gap-3">
                   <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style="background:#2c2c2c;">
                     <Image src={facebookIcon} alt="" width={16} height={16} class="invert opacity-70" />
                   </div>
-                  <span class="text-neutral-300 text-3.5 font-medium">{u.facebook}</span>
+                  <span class="text-neutral-300 text-3.5 font-medium">{u.facbook}</span>
                 </div>
               )}
               {u.discord && (
@@ -368,7 +420,7 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
             </div>
 
             <!-- Box réseaux (mobile) -->
-            {(u.insta || u.facebook || u.discord) && (
+            {(u.insta || u.facbook || u.discord) && (
               <div class="lg:hidden bg-white border-0.75 border-neutral-300 rounded-2.5 px-4 py-5.5 mb-4.5">
                 <h3 class="text-black m-0 mb-5">Réseaux sociaux</h3>
                 <div class="flex flex-col gap-3">
@@ -378,10 +430,10 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
                       <span class="text-black text-4 font-medium">@{u.insta}</span>
                     </div>
                   )}
-                  {u.facebook && (
+                  {u.facbook && (
                     <div class="flex items-center gap-3">
                       <Image src={facebookIcon} alt="" width={18} height={18} />
-                      <span class="text-black text-4 font-medium">{u.facebook}</span>
+                      <span class="text-black text-4 font-medium">{u.facbook}</span>
                     </div>
                   )}
                   {u.discord && (
@@ -448,7 +500,7 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
                     <!-- Mobile -->
                     <div class="block lg:hidden bg-white rounded-0.5 overflow-hidden shadow-md">
                       <div class="h-32 overflow-hidden">
-                        <ImageFichier cle={bar.image} width={280} height={128} class="w-full h-full object-cover" />
+                        <PbImage record={bar} recordImage={bar.img?.[0]} width={280} height={128} class="w-full h-full object-cover" />
                       </div>
                       <div class="p-3">
                         <h3 class="m-0 text-black text-4 mb-2 leading-tight">{bar.nom}</h3>
@@ -460,7 +512,7 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
                     <!-- Desktop -->
                     <div class="hidden lg:block relative bg-white rounded-0.5 h-87.75 shadow-md">
                       <div class="absolute top-0 left-0 right-0 h-50 overflow-hidden rounded-tl-0.5 rounded-tr-0.5">
-                        <ImageFichier cle={bar.image} width={280} height={200} class="w-full h-full object-cover" />
+                        <PbImage record={bar} recordImage={bar.img?.[0]} width={280} height={200} class="w-full h-full object-cover" />
                       </div>
                       <h3 class="absolute top-52.5 left-4.75 right-4.75 m-0 text-black">{bar.nom}</h3>
                       <a href={`/bar/${bar.id}`}
@@ -498,12 +550,13 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
             {jeuxFavori.length > 0 ? (
               <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-8.25">
                 {jeuxFavori.map(jeu => {
+                  const imgFile = Array.isArray(jeu.img) ? jeu.img[0] : jeu.img;
                   return (
                     <>
                       <!-- Mobile -->
                       <div class="block lg:hidden bg-white rounded-0.5 overflow-hidden shadow-md">
                         <div class="h-32 overflow-hidden">
-                          <ImageFichier cle={jeu.image} width={280} height={128} class="w-full h-full object-cover" />
+                          <PbImage record={jeu} recordImage={imgFile} width={280} height={128} class="w-full h-full object-cover" />
                         </div>
                         <div class="p-3">
                           <h3 class="m-0 text-black text-4 mb-2 leading-tight">{jeu.nom}</h3>
@@ -515,7 +568,7 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
                       <!-- Desktop -->
                       <div class="hidden lg:block relative bg-white rounded-0.5 h-87.75 shadow-md">
                         <div class="absolute top-0 left-0 right-0 h-50 overflow-hidden rounded-tl-0.5 rounded-tr-0.5">
-                          <ImageFichier cle={jeu.image} width={280} height={200} class="w-full h-full object-cover" />
+                          <PbImage record={jeu} recordImage={imgFile} width={280} height={200} class="w-full h-full object-cover" />
                         </div>
                         <h3 class="absolute top-52.5 left-4.75 right-4.75 m-0 text-black">{jeu.nom}</h3>
                         <a href="/jeux"
@@ -556,7 +609,7 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
                 {boissonsFavori.map(b => (
                   <div class="flex flex-col gap-2">
                     <div class="h-40 lg:h-50 rounded-1.25 overflow-hidden shadow-sm">
-                      <ImageFichier cle={b.image} alt={b.nom} class="w-full h-full object-cover" />
+                      <PbImage record={b} recordImage={b.img} alt={b.nom} class="w-full h-full object-cover" />
                     </div>
                     <p class="text-black text-4 font-medium m-0 text-center">{b.nom}</p>
                   </div>
@@ -595,8 +648,9 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
 
 </Layout>
 
-<script is:inline define:vars={{ targetUserId: id, activeTab }}>
-  // Les actions passent par /api/amis/* : l'utilisateur courant est lu côté serveur.
+<script is:inline define:vars={{ pbUserId: userId, targetUserId: id, activeTab }}>
+  // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+  // vers PB_URL côté serveur, et lit le token depuis le cookie httpOnly.
   function moveIndicator(btn) {
     var indicator = document.getElementById('tab-indicator');
     var list      = document.getElementById('tab-list');
@@ -620,40 +674,126 @@ const activeTab = Astro.url.searchParams.get('tab') ?? 'profil';
     });
   });
 
-  function appel(action, btn, apres) {
+  async function sendRequest(btn) {
     if (!btn) return;
     btn.disabled = true; btn.style.opacity = '0.6';
-    fetch('/api/amis/' + action, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ami_id: targetUserId }),
-    }).then(function (r) {
-      if (!r.ok) throw new Error('echec');
-      return r.json();
-    }).then(apres).catch(function () {
-      btn.disabled = false; btn.style.opacity = '1';
-    });
+    try {
+      var r = await fetch('/api/pb/collections/users/records/' + targetUserId);
+      if (r.ok) {
+        var target = await r.json();
+        var existing = Array.isArray(target.demande_amies) ? target.demande_amies : [];
+        if (existing.indexOf(pbUserId) < 0) {
+          existing.push(pbUserId);
+          await fetch('/api/pb/collections/users/records/' + targetUserId, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ demande_amies: existing }),
+          });
+        }
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Demande envoyée';
+        btn.style.background = '#347645';
+        btn.style.opacity = '1';
+        btn.disabled = true;
+      }
+    } catch (_) { btn.disabled = false; btn.style.opacity = '1'; }
   }
 
-  function recharger() { window.location.reload(); }
+  var sendBtn = document.getElementById('send-request-btn');
+  if (sendBtn) sendBtn.addEventListener('click', function () { sendRequest(sendBtn); });
+  var sendBtnM = document.getElementById('send-request-btn-mobile');
+  if (sendBtnM) sendBtnM.addEventListener('click', function () { sendRequest(sendBtnM); });
 
-  function lier(ids, action, apres) {
-    ids.forEach(function (idBtn) {
-      var b = document.getElementById(idBtn);
-      if (b) b.addEventListener('click', function () { appel(action, b, apres(b)); });
-    });
+  async function acceptRequest(btn) {
+    if (!btn) return;
+    btn.disabled = true; btn.style.opacity = '0.6';
+    try {
+      var meRes = await fetch('/api/pb/collections/users/records/' + pbUserId);
+      if (meRes.ok) {
+        var me = await meRes.json();
+        var myAmies = Array.isArray(me.amies) ? me.amies : [];
+        var myDemandes = Array.isArray(me.demande_amies) ? me.demande_amies : [];
+        if (myAmies.indexOf(targetUserId) < 0) myAmies.push(targetUserId);
+        myDemandes = myDemandes.filter(function (i) { return i !== targetUserId; });
+        await fetch('/api/pb/collections/users/records/' + pbUserId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amies: myAmies, demande_amies: myDemandes }),
+        });
+      }
+      var theirRes = await fetch('/api/pb/collections/users/records/' + targetUserId);
+      if (theirRes.ok) {
+        var them = await theirRes.json();
+        var theirAmies = Array.isArray(them.amies) ? them.amies : [];
+        if (theirAmies.indexOf(pbUserId) < 0) theirAmies.push(pbUserId);
+        await fetch('/api/pb/collections/users/records/' + targetUserId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amies: theirAmies }),
+        });
+      }
+      window.location.reload();
+    } catch (_) { btn.disabled = false; btn.style.opacity = '1'; }
   }
 
-  // Envoyer une demande (si l'autre m'avait déjà écrit, on devient amis : rechargement)
-  lier(['send-request-btn', 'send-request-btn-mobile'], 'demande', function (b) {
-    return function (data) {
-      if (data.etat === 'ami') return recharger();
-      b.textContent = 'Demande envoyée';
-      b.style.background = '#347645';
-      b.style.opacity = '1';
-    };
-  });
-  lier(['accept-btn', 'accept-btn-mobile'], 'accepter', function () { return recharger; });
-  lier(['refuse-btn', 'refuse-btn-mobile'], 'refuser', function () { return recharger; });
-  lier(['remove-friend-btn', 'remove-friend-btn-mobile'], 'supprimer', function () { return recharger; });
+  var acceptBtn = document.getElementById('accept-btn');
+  if (acceptBtn) acceptBtn.addEventListener('click', function () { acceptRequest(acceptBtn); });
+  var acceptBtnM = document.getElementById('accept-btn-mobile');
+  if (acceptBtnM) acceptBtnM.addEventListener('click', function () { acceptRequest(acceptBtnM); });
+
+  async function refuseRequest(btn) {
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+      var meRes = await fetch('/api/pb/collections/users/records/' + pbUserId);
+      if (meRes.ok) {
+        var me = await meRes.json();
+        var myDemandes = Array.isArray(me.demande_amies) ? me.demande_amies : [];
+        myDemandes = myDemandes.filter(function (i) { return i !== targetUserId; });
+        await fetch('/api/pb/collections/users/records/' + pbUserId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ demande_amies: myDemandes }),
+        });
+      }
+      window.location.reload();
+    } catch (_) { btn.disabled = false; }
+  }
+
+  var refuseBtn = document.getElementById('refuse-btn');
+  if (refuseBtn) refuseBtn.addEventListener('click', function () { refuseRequest(refuseBtn); });
+  var refuseBtnM = document.getElementById('refuse-btn-mobile');
+  if (refuseBtnM) refuseBtnM.addEventListener('click', function () { refuseRequest(refuseBtnM); });
+
+  async function removeFriend(btn) {
+    if (!btn) return;
+    btn.disabled = true; btn.style.opacity = '0.6';
+    try {
+      var meRes = await fetch('/api/pb/collections/users/records/' + pbUserId);
+      if (meRes.ok) {
+        var me = await meRes.json();
+        var myAmies = (Array.isArray(me.amies) ? me.amies : []).filter(function (i) { return i !== targetUserId; });
+        await fetch('/api/pb/collections/users/records/' + pbUserId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amies: myAmies }),
+        });
+      }
+      var theirRes = await fetch('/api/pb/collections/users/records/' + targetUserId);
+      if (theirRes.ok) {
+        var them = await theirRes.json();
+        var theirAmies = (Array.isArray(them.amies) ? them.amies : []).filter(function (i) { return i !== pbUserId; });
+        await fetch('/api/pb/collections/users/records/' + targetUserId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amies: theirAmies }),
+        });
+      }
+      window.location.reload();
+    } catch (_) { btn.disabled = false; btn.style.opacity = '1'; }
+  }
+
+  var removeBtn = document.getElementById('remove-friend-btn');
+  if (removeBtn) removeBtn.addEventListener('click', function () { removeFriend(removeBtn); });
+  var removeBtnM = document.getElementById('remove-friend-btn-mobile');
+  if (removeBtnM) removeBtnM.addEventListener('click', function () { removeFriend(removeBtnM); });
 </script>

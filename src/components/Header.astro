@@ -3,17 +3,26 @@ import { Image } from 'astro:assets';
 import logoDark from '../assets/icon/logo-dark.svg';
 import arrowRightLg from '../assets/icon/arrow_right_lg.svg';
 import userIcon  from '../assets/icon/user.svg';
-import ImageFichier from '../components/ImageFichier.astro';
-import { getUtilisateurPublic } from '../lib/db.ts';
+import PbImage from '../components/PbImage.astro';
+import { getImageUrl, PB_URL } from '../../backend/backend.js';
 import '../styles/header.css';
 
-const isLoggedIn = !!Astro.locals.user;
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+const isLoggedIn = !!(token && userId);
 const profileHref = isLoggedIn ? '/profil' : '/connexion';
 const path = Astro.url.pathname;
-const isAdmin = Astro.locals.droits?.admin === true;
 
-// Avatar (clé de fichier) de l'utilisateur connecté
-const avatarKey = isLoggedIn ? (getUtilisateurPublic(Astro.locals.user.id)?.avatar ?? null) : null;
+let avatarUrl = null;
+if (isLoggedIn) {
+  const res = await fetch(`${PB_URL}/api/collections/users/records/${userId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (res.ok) {
+    const user = await res.json();
+    if (user.avatar) avatarUrl = getImageUrl(user, user.avatar);
+  }
+}
 ---
 
 <header class="fixed top-0 left-0 w-full z-50 bg-white shadow-md">
@@ -53,14 +62,9 @@ const avatarKey = isLoggedIn ? (getUtilisateurPublic(Astro.locals.user.id)?.avat
 
     <!-- Actions desktop -->
     <div class="hidden lg:flex items-center gap-6.5">
-      {isAdmin && (
-        <a href="/admin" class="font-medium text-3.5 leading-tight text-black hover:opacity-70 transition-opacity whitespace-nowrap">
-          Admin
-        </a>
-      )}
       <a href={profileHref} aria-label="Mon profil" class="hover:opacity-70 transition-opacity">
-        {avatarKey ? (
-          <ImageFichier cle={avatarKey} alt="Mon profil" width={31} height={31} loading="eager" class="size-7.75 rounded-full object-cover" />
+        {avatarUrl ? (
+          <PbImage src={avatarUrl} alt="Mon profil" width={31} height={31} class="size-7.75 rounded-full object-cover" />
         ) : (
           <Image src={userIcon} alt="" width={31} height={31} />
         )}
@@ -75,8 +79,8 @@ const avatarKey = isLoggedIn ? (getUtilisateurPublic(Astro.locals.user.id)?.avat
 
       <!-- Connexion / profil -->
       <a href={profileHref} aria-label="Mon profil" class="hover:opacity-70 transition-opacity">
-        {avatarKey ? (
-          <ImageFichier cle={avatarKey} alt="Mon profil" width={30} height={30} loading="eager" class="size-7.5 rounded-full object-cover" />
+        {avatarUrl ? (
+          <PbImage src={avatarUrl} alt="Mon profil" width={30} height={30} class="size-7.5 rounded-full object-cover" />
         ) : (
           <Image src={userIcon} alt="" width={28} height={28} />
         )}
@@ -158,13 +162,7 @@ const avatarKey = isLoggedIn ? (getUtilisateurPublic(Astro.locals.user.id)?.avat
     </div>
 
     <!-- CTA session -->
-    <div class="flex flex-col gap-3">
-      {isAdmin && (
-        <a href="/admin"
-          class="nav-link flex items-center justify-center h-14 border border-white/30 text-white font-bold text-4 uppercase tracking-widest hover:bg-white/10 transition-colors">
-          Admin
-        </a>
-      )}
+    <div class="flex gap-3">
       <a href={isLoggedIn ? '/session' : '/inscription'}
         class="nav-link flex flex-1 items-center justify-center h-14 bg-primary-500 text-primary-900 font-bold text-4 uppercase tracking-widest hover:bg-primary-550 transition-colors">
         {isLoggedIn ? 'Crée un barathon' : "S'inscrire"}

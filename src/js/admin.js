@@ -1,54 +1,15 @@
 // @ts-nocheck
-// Logique de la page admin.
-// Toutes les écritures passent par /api/admin/* (réservé aux administrateurs,
-// authentifié par le cookie de session httpOnly : aucun token côté client).
-// Les valeurs venant de la base sont insérées échappées (escAttr / escText)
-// ou via textContent, jamais brutes dans innerHTML.
+// Logique de la page admin
 
 (function () {
+  // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+  // vers PB_URL côté serveur, et lit le token depuis le cookie httpOnly.
   var d            = JSON.parse(document.getElementById('page-data').textContent);
   var allBars      = d.allBars;
   var allBoisons   = d.allBoisons;
   var allJeux      = d.allJeux;
   var allBoutique  = d.allBoutique;
   var allQuestions = d.allQuestions; // cache local, mis à jour après ajout/suppression
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  function escAttr(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-      .replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-  function escText(s) {
-    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
-  // Appel d'une route /api/admin : JSON ou FormData. Lève une Error avec le message du serveur.
-  async function api(method, url, body) {
-    var opts = { method: method, headers: {} };
-    if (body instanceof FormData) {
-      opts.body = body;
-    } else if (body !== undefined) {
-      opts.headers['Content-Type'] = 'application/json';
-      opts.body = JSON.stringify(body);
-    }
-    var res = await fetch(url, opts);
-    var data = null;
-    try { data = await res.json(); } catch (e) { /* corps vide */ }
-    if (!res.ok) throw new Error((data && data.error) || ('Erreur ' + res.status));
-    return data || {};
-  }
-
-  var toastTimer = null;
-  function toast(message, ok) {
-    var el = document.getElementById('admin-toast');
-    if (!el) return;
-    el.textContent = message;
-    el.style.background = ok ? '#347645' : '#ef4444';
-    el.style.display = 'block';
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { el.style.display = 'none'; }, 4000);
-  }
 
   // ── Sidebar navigation ────────────────────────────────────────────────────
   function switchSection(sectionId) {
@@ -130,11 +91,7 @@
   document.getElementById('confirm-ok').addEventListener('click', async function () {
     var btn = this;
     btn.disabled = true; btn.textContent = '…';
-    try {
-      if (pendingAction) await pendingAction();
-    } catch (err) {
-      toast(err.message || 'Une erreur est survenue.', false);
-    }
+    if (pendingAction) await pendingAction();
     document.getElementById('confirm-modal').style.display = 'none';
     pendingAction = null;
     btn.disabled = false; btn.textContent = 'Confirmer';
@@ -143,7 +100,7 @@
   // ── Drawer ────────────────────────────────────────────────────────────────
   var drawer        = document.getElementById('drawer');
   var drawerOverlay = document.getElementById('drawer-overlay');
-  var drawerMode    = null; // 'bar' | 'boison' | 'boutique' | 'jeu' | 'question'
+  var drawerMode    = null; // 'bar' | 'boison' | 'boutique'
   var editingId     = null;
 
   function openDrawer() {
@@ -167,57 +124,6 @@
     section: 'font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#999; margin:24px 0 12px; padding-bottom:8px; border-bottom:1px solid #f0f0f0;',
   };
 
-  // ── Helpers HTML ──────────────────────────────────────────────────────────
-  function field(id, label, type, value, placeholder, extra) {
-    return '<div style="' + S.group + '">' +
-      '<label for="f-' + id + '" style="' + S.label + '">' + label + '</label>' +
-      '<input id="f-' + id + '" type="' + type + '" value="' + escAttr(value) + '"' +
-      (placeholder ? ' placeholder="' + escAttr(placeholder) + '"' : '') +
-      (extra ? ' ' + extra : '') +
-      ' style="' + S.input + '" /></div>';
-  }
-  function area(id, label, value) {
-    return '<div style="' + S.group + '">' +
-      '<label for="f-' + id + '" style="' + S.label + '">' + label + '</label>' +
-      '<textarea id="f-' + id + '" rows="3" style="' + S.input + ' resize:vertical;">' + escText(value) + '</textarea></div>';
-  }
-  function val(id) { var el = document.getElementById('f-' + id); return el ? el.value.trim() : ''; }
-
-  // Bloc d'images : miniatures existantes (case « Retirer ») + ajout de fichiers.
-  // champ : 'img' | 'galerie' | 'image' ; multiple : plusieurs fichiers.
-  function imagesBlock(champ, titre, cles, multiple) {
-    var thumbs = (cles || []).map(function (cle) {
-      return '<label style="display:inline-block; width:96px; margin:0 8px 8px 0; font-size:11px; color:#666; vertical-align:top;">' +
-        '<img src="/fichiers/' + escAttr(cle) + '" alt="" style="width:96px; height:72px; object-fit:cover; border-radius:6px; display:block; margin-bottom:4px;" />' +
-        (multiple ? '<input type="checkbox" data-retirer="' + champ + '" value="' + escAttr(cle) + '" /> Retirer' : '') + '</label>';
-    }).join('');
-    return '<p style="' + S.section + '">' + titre + '</p>' +
-      '<div style="' + S.group + '">' + thumbs +
-        '<label for="f-' + champ + '-ajouter" style="' + S.label + '">' +
-          (multiple ? 'Ajouter des images' : (cles && cles.length ? 'Remplacer l\'image' : 'Choisir une image')) + '</label>' +
-        '<input id="f-' + champ + '-ajouter" type="file" accept="image/*"' + (multiple ? ' multiple' : '') +
-        ' style="font-size:13px; color:#555;" />' +
-      '</div>';
-  }
-
-  // Ajoute au FormData les images à ajouter / retirer d'un bloc imagesBlock.
-  function appendImages(fd, champ, remplacer) {
-    var input = document.getElementById('f-' + champ + '-ajouter');
-    if (input && input.files) {
-      for (var i = 0; i < input.files.length; i++) fd.append(champ + '_ajouter', input.files[i]);
-    }
-    if (remplacer && input && input.files && input.files.length) {
-      // image unique : l'ancienne est retirée quand on en envoie une nouvelle
-      document.querySelectorAll('input[data-retirer="' + champ + '"]').forEach(function (cb) {
-        fd.append(champ + '_retirer', cb.value);
-      });
-      return;
-    }
-    document.querySelectorAll('input[data-retirer="' + champ + '"]:checked').forEach(function (cb) {
-      fd.append(champ + '_retirer', cb.value);
-    });
-  }
-
   // ── Form: bar ─────────────────────────────────────────────────────────────
   var JOURS = [
     { key: 'h_lundi',    label: 'Lundi'    },
@@ -238,13 +144,10 @@
     document.getElementById('drawer-title').textContent = bar ? 'Modifier le bar' : 'Nouveau bar';
     document.getElementById('drawer-error').style.display = 'none';
 
-    var boissonsBox = allBoisons.length === 0
-      ? '<p style="font-size:13px; color:#aaa; margin:0;">Aucune boisson.</p>'
-      : allBoisons.map(function (b) {
-          var coche = bar && bar.boissons.indexOf(b.id) !== -1;
-          return '<label style="display:inline-flex; align-items:center; gap:6px; margin:0 14px 8px 0; font-size:13px; color:#333;">' +
-            '<input type="checkbox" data-boisson value="' + escAttr(b.id) + '"' + (coche ? ' checked' : '') + ' /> ' + escText(b.nom) + '</label>';
-        }).join('');
+    var imgPreview = bar && bar.img
+      ? '<img src="' + '/pb-files/' + bar.collectionName + '/' + bar.id + '/' + bar.img
+        + '" style="width:100%; height:140px; object-fit:cover; border-radius:8px; margin-bottom:8px; display:block;" />'
+      : '';
 
     document.getElementById('drawer-body').innerHTML =
       '<p style="' + S.section + '">Informations générales</p>' +
@@ -254,15 +157,16 @@
 
       '<p style="' + S.section + '">Localisation (carte)</p>' +
       '<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">' +
-        field('lat', 'Latitude',  'number', bar ? bar.lat : '', 'ex : 47.5079', 'step="any" min="-90" max="90"') +
-        field('lon', 'Longitude', 'number', bar ? bar.lon : '', 'ex : 6.7985',  'step="any" min="-180" max="180"') +
+        field('lat', 'Latitude',  'number', bar ? bar.lat : '', 'ex : 47.5079') +
+        field('lon', 'Longitude', 'number', bar ? bar.lon : '', 'ex : 6.7985') +
       '</div>' +
 
-      '<p style="' + S.section + '">Boissons proposées</p>' +
-      '<div style="' + S.group + '">' + boissonsBox + '</div>' +
-
-      imagesBlock('img',     'Images principales', bar ? bar.images  : [], true) +
-      imagesBlock('galerie', 'Galerie',            bar ? bar.galerie : [], true) +
+      '<p style="' + S.section + '">Image principale</p>' +
+      '<div style="' + S.group + '">' +
+        imgPreview +
+        '<label style="' + S.label + '">' + (bar && bar.img ? 'Remplacer l\'image' : 'Choisir une image') + '</label>' +
+        '<input id="f-img" type="file" accept="image/*" style="font-size:13px; color:#555;" />' +
+      '</div>' +
 
       '<p style="' + S.section + '">Horaires d\'ouverture</p>' +
       '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">' +
@@ -284,13 +188,42 @@
     document.getElementById('drawer-title').textContent = boison ? 'Modifier la boisson' : 'Nouvelle boisson';
     document.getElementById('drawer-error').style.display = 'none';
 
+    var imgPreview = boison && boison.img
+      ? '<img src="' + '/pb-files/' + boison.collectionName + '/' + boison.id + '/' + boison.img
+        + '" style="width:100%; height:140px; object-fit:cover; border-radius:8px; margin-bottom:8px; display:block;" />'
+      : '';
+
     document.getElementById('drawer-body').innerHTML =
       '<p style="' + S.section + '">Informations</p>' +
       field('nom', 'Nom de la boisson *', 'text', boison ? boison.nom : '', 'ex : Biere blonde, Coca') +
-      imagesBlock('image', 'Image', boison && boison.image ? [boison.image] : [], false);
+
+      '<p style="' + S.section + '">Image</p>' +
+      '<div style="' + S.group + '">' +
+        imgPreview +
+        '<label style="' + S.label + '">' + (boison && boison.img ? 'Remplacer l\'image' : 'Choisir une image') + '</label>' +
+        '<input id="f-img" type="file" accept="image/*" style="font-size:13px; color:#555;" />' +
+      '</div>';
 
     openDrawer();
   }
+
+  // ── Helpers HTML ──────────────────────────────────────────────────────────
+  function field(id, label, type, value, placeholder) {
+    return '<div style="' + S.group + '">' +
+      '<label for="f-' + id + '" style="' + S.label + '">' + label + '</label>' +
+      '<input id="f-' + id + '" type="' + type + '" value="' + escAttr(value) + '"' +
+      (placeholder ? ' placeholder="' + escAttr(placeholder) + '"' : '') +
+      ' style="' + S.input + '" /></div>';
+  }
+  function area(id, label, value) {
+    return '<div style="' + S.group + '">' +
+      '<label for="f-' + id + '" style="' + S.label + '">' + label + '</label>' +
+      '<textarea id="f-' + id + '" rows="3" style="' + S.input + ' resize:vertical;">' + escText(value) + '</textarea></div>';
+  }
+  function escAttr(s) { return String(s ?? '').replace(/"/g, '&quot;'); }
+  function escText(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  function val(id) { var el = document.getElementById('f-' + id); return el ? el.value.trim() : ''; }
+  function fileVal(id) { var el = document.getElementById('f-' + id); return el && el.files && el.files[0] ? el.files[0] : null; }
 
   // ── Submit ────────────────────────────────────────────────────────────────
   document.getElementById('drawer-submit').addEventListener('click', async function () {
@@ -303,7 +236,7 @@
       if (drawerMode === 'bar')      await submitBar();
       if (drawerMode === 'boison')   await submitBoison();
       if (drawerMode === 'boutique') await submitBoutique();
-      if (drawerMode === 'jeu')      await submitJeu();
+      if (drawerMode === 'jeu')      { await submitJeu(); closeDrawer(); return; }
       if (drawerMode === 'question') { await submitQuestion(); closeDrawer(); return; }
       closeDrawer();
       window.location.reload();
@@ -325,21 +258,24 @@
     fd.append('description', val('description'));
 
     var lat = val('lat'), lon = val('lon');
-    if ((lat === '') !== (lon === '')) throw new Error('Renseigne la latitude ET la longitude (ou aucune des deux).');
-    fd.append('latitude',  lat);
-    fd.append('longitude', lon);
+    if (lat !== '' && lon !== '') {
+      fd.append('localisation', JSON.stringify({ lat: parseFloat(lat), lon: parseFloat(lon) }));
+    }
 
-    JOURS.forEach(function (j) { fd.append('horaires_' + j.key.slice(2), val(j.key)); });
+    var horaires = { horaires_lundi: val('h_lundi'), horaires_mardi: val('h_mardi'),
+      horaires_mercredi: val('h_mercredi'), horaires_jeudi: val('h_jeudi'),
+      horaires_vendredi: val('h_vendredi'), horaires_samedi: val('h_samedi'),
+      horaires_dimanche: val('h_dimanche') };
+    for (var k in horaires) fd.append(k, horaires[k]);
 
-    fd.append('boissons_maj', '1');
-    document.querySelectorAll('input[data-boisson]:checked').forEach(function (cb) {
-      fd.append('boissons', cb.value);
-    });
+    var imgFile = fileVal('img');
+    if (imgFile) fd.append('img', imgFile);
 
-    appendImages(fd, 'img', false);
-    appendImages(fd, 'galerie', false);
-
-    await api(editingId ? 'PATCH' : 'POST', '/api/admin/bars' + (editingId ? '/' + encodeURIComponent(editingId) : ''), fd);
+    var res = await fetch(
+      '/api/pb/collections/bar/records' + (editingId ? '/' + editingId : ''),
+      { method: editingId ? 'PATCH' : 'POST', body: fd }
+    );
+    if (!res.ok) throw new Error((await res.json()).message || 'Erreur PocketBase.');
   }
 
   async function submitBoison() {
@@ -348,10 +284,14 @@
 
     var fd = new FormData();
     fd.append('nom', nom);
-    var input = document.getElementById('f-image-ajouter');
-    if (input && input.files && input.files[0]) fd.append('image', input.files[0]);
+    var imgFile = fileVal('img');
+    if (imgFile) fd.append('img', imgFile);
 
-    await api(editingId ? 'PATCH' : 'POST', '/api/admin/boissons' + (editingId ? '/' + encodeURIComponent(editingId) : ''), fd);
+    var res = await fetch(
+      '/api/pb/collections/boison/records' + (editingId ? '/' + editingId : ''),
+      { method: editingId ? 'PATCH' : 'POST', body: fd }
+    );
+    if (!res.ok) throw new Error((await res.json()).message || 'Erreur PocketBase.');
   }
 
   // ── Form: boutique ────────────────────────────────────────────────────────
@@ -369,22 +309,24 @@
     '</select>';
   }
 
-  function boutiqueConditionalField(item, type) {
+  function boutiqueConditionalField(item) {
+    var type = item ? item.type : 'decoration_avatar';
     if (type === 'titre') {
       return '<div id="f-conditional" style="' + S.group + '">' +
-        '<label for="f-titre" style="' + S.label + '">Texte du titre *</label>' +
-        '<input id="f-titre" type="text" value="' + escAttr(item ? item.titre : '') + '" placeholder="ex : Barathonien élite" style="' + S.input + '" />' +
+        '<label style="' + S.label + '">Texte du titre *</label>' +
+        '<input id="f-type-titre" type="text" value="' + escAttr(item ? item.type_titre : '') + '" placeholder="ex : Barathonien élite" style="' + S.input + '" />' +
       '</div>';
     }
     var label = type === 'theme' ? 'Image du thème' : 'Image de la décoration';
-    var existingImg = item && item.type !== 'titre' ? item.image : null;
+    var imgFieldName = type === 'theme' ? 'type_them' : 'type_decoration_avatar';
+    var existingImg  = item ? (type === 'theme' ? item.type_them : item.type_decoration_avatar) : null;
     var preview = existingImg
-      ? '<img src="/fichiers/' + escAttr(existingImg) + '" alt="" style="width:100%; height:120px; object-fit:cover; border-radius:8px; margin-bottom:8px; display:block;" />'
+      ? '<img src="' + '/pb-files/' + item.collectionName + '/' + item.id + '/' + existingImg + '" style="width:100%; height:120px; object-fit:cover; border-radius:8px; margin-bottom:8px; display:block;" />'
       : '';
     return '<div id="f-conditional" style="' + S.group + '">' +
-      '<label for="f-image-ajouter" style="' + S.label + '">' + label + (existingImg ? ' (remplacer)' : ' *') + '</label>' +
+      '<label style="' + S.label + '">' + label + (item && existingImg ? ' (remplacer)' : ' *') + '</label>' +
       preview +
-      '<input id="f-image-ajouter" type="file" accept="image/*" style="font-size:13px; color:#555;" />' +
+      '<input id="f-img-boutique" type="file" accept="image/*" data-pb-field="' + imgFieldName + '" style="font-size:13px; color:#555;" />' +
     '</div>';
   }
 
@@ -392,7 +334,6 @@
     drawerMode = 'boutique';
     editingId  = id || null;
     var item   = id ? allBoutique.find(function (b) { return b.id === id; }) : null;
-    var type   = item ? item.type : 'decoration_avatar';
 
     document.getElementById('drawer-label').textContent = 'Boutique';
     document.getElementById('drawer-title').textContent = item ? 'Modifier l\'article' : 'Nouvel article';
@@ -401,17 +342,19 @@
     document.getElementById('drawer-body').innerHTML =
       '<p style="' + S.section + '">Informations</p>' +
       field('nom', 'Nom de l\'article *', 'text', item ? item.nom : '', 'ex : Couronne de champion') +
-      field('prix', 'Prix en points *', 'number', item ? item.prix : '', 'ex : 500', 'min="0" step="1"') +
+      field('prix', 'Prix en points *', 'number', item ? item.prix : '', 'ex : 500') +
       '<div style="' + S.group + '">' +
         '<label for="f-type" style="' + S.label + '">Type *</label>' +
-        boutiqueTypeSelect(type) +
+        boutiqueTypeSelect(item ? item.type : 'decoration_avatar') +
       '</div>' +
       '<p style="' + S.section + '">Contenu</p>' +
-      boutiqueConditionalField(item, type);
+      boutiqueConditionalField(item);
 
     // Mise à jour dynamique du champ conditionnel au changement de type
-    document.getElementById('f-type').addEventListener('change', function () {
-      document.getElementById('f-conditional').outerHTML = boutiqueConditionalField(item, this.value);
+    var typeSelect = document.getElementById('f-type');
+    typeSelect.addEventListener('change', function () {
+      var fakeItem = item ? Object.assign({}, item, { type: this.value }) : { type: this.value };
+      document.getElementById('f-conditional').outerHTML = boutiqueConditionalField(fakeItem);
     });
 
     openDrawer();
@@ -430,153 +373,78 @@
     fd.append('type', type);
 
     if (type === 'titre') {
-      var titre = val('titre');
-      if (!titre) throw new Error('Le texte du titre est obligatoire.');
-      fd.append('titre', titre);
+      var titreTxt = document.getElementById('f-type-titre');
+      if (!titreTxt || !titreTxt.value.trim()) throw new Error('Le texte du titre est obligatoire.');
+      fd.append('type_titre', titreTxt.value.trim());
     } else {
-      var imgInput = document.getElementById('f-image-ajouter');
-      var item     = editingId ? allBoutique.find(function (b) { return b.id === editingId; }) : null;
-      var aDejaImage = item && item.type !== 'titre' && item.image;
-      if (imgInput && imgInput.files && imgInput.files[0]) {
-        fd.append('image', imgInput.files[0]);
-      } else if (!aDejaImage) {
+      var imgInput = document.getElementById('f-img-boutique');
+      var pbField  = imgInput ? imgInput.dataset.pbField : null;
+      if (imgInput && imgInput.files && imgInput.files[0] && pbField) {
+        fd.append(pbField, imgInput.files[0]);
+      } else if (!editingId) {
         throw new Error('Une image est obligatoire pour ce type d\'article.');
       }
     }
 
-    await api(editingId ? 'PATCH' : 'POST', '/api/admin/boutique' + (editingId ? '/' + encodeURIComponent(editingId) : ''), fd);
+    var res = await fetch(
+      '/api/pb/collections/boutique/records' + (editingId ? '/' + editingId : ''),
+      { method: editingId ? 'PATCH' : 'POST', body: fd }
+    );
+    if (!res.ok) throw new Error((await res.json()).message || 'Erreur PocketBase.');
   }
 
-  // ── Delete helper ─────────────────────────────────────────────────────────
-  async function deleteRecord(url, id, rowAttr) {
-    await api('DELETE', url + '/' + encodeURIComponent(id));
-    var row = document.querySelector('[' + rowAttr + '="' + id + '"]');
-    if (row) row.remove();
+  // ── Delete helpers ────────────────────────────────────────────────────────
+  async function deleteRecord(collection, id, rowAttr) {
+    var res = await fetch('/api/pb/collections/' + collection + '/records/' + id, {
+      method: 'DELETE',
+    });
+    if (res.ok) {
+      var row = document.querySelector('[' + rowAttr + '="' + id + '"]');
+      if (row) row.remove();
+    }
   }
 
-  // ── Utilisateurs : droits ─────────────────────────────────────────────────
-  function styleToggle(btn, on, couleurOn, fondOn) {
-    btn.style.background = on ? fondOn : '#f3f4f6';
-    btn.style.color      = on ? couleurOn : '#888';
-  }
-
+  // ── Toggle admin ──────────────────────────────────────────────────────────
   async function toggleAdmin(id, currentAdmin, btn) {
     var newVal = !currentAdmin;
-    await api('PATCH', '/api/admin/utilisateurs/' + encodeURIComponent(id), { admin: newVal });
-    btn.dataset.admin = String(newVal);
-    btn.textContent   = newVal ? 'Admin' : 'User';
-    styleToggle(btn, newVal, '#347645', '#edf7ee');
-    toast(newVal ? 'Droits admin accordés.' : 'Droits admin retirés.', true);
-  }
-
-  async function toggleVerifie(btn) {
-    var newVal = btn.dataset.verifie !== 'true';
-    btn.disabled = true;
-    try {
-      await api('PATCH', '/api/admin/utilisateurs/' + encodeURIComponent(btn.dataset.id), { verifie: newVal });
-      btn.dataset.verifie = String(newVal);
-      btn.textContent     = newVal ? 'Vérifié' : 'Non vérifié';
-      styleToggle(btn, newVal, '#2563eb', '#eff6ff');
-    } catch (err) {
-      toast(err.message, false);
-    } finally {
-      btn.disabled = false;
-    }
-  }
-
-  async function changeAbonnement(select) {
-    var precedent = select.dataset.prev;
-    try {
-      await api('PATCH', '/api/admin/utilisateurs/' + encodeURIComponent(select.dataset.id), { abonnement: select.value });
-      select.dataset.prev = select.value;
-      toast('Abonnement mis à jour.', true);
-    } catch (err) {
-      if (precedent) select.value = precedent;
-      toast(err.message, false);
-    }
-  }
-
-  async function setPoints(btn) {
-    var id    = btn.dataset.id;
-    var input = document.querySelector('input[data-points-input="' + id + '"]');
-    var n     = Number(input ? input.value : NaN);
-    if (!input || input.value.trim() === '' || !Number.isInteger(n) || n < 0) {
-      toast('Les points doivent être un entier supérieur ou égal à 0.', false);
-      return;
-    }
-    btn.disabled = true;
-    try {
-      await api('PATCH', '/api/admin/utilisateurs/' + encodeURIComponent(id), { points: n });
-      toast('Points mis à jour.', true);
-    } catch (err) {
-      toast(err.message, false);
-    } finally {
-      btn.disabled = false;
-    }
-  }
-
-  // ── Utilisateurs : mot de passe temporaire ────────────────────────────────
-  function fermerMdp() {
-    document.getElementById('mdp-modal').style.display = 'none';
-    document.getElementById('mdp-valeur').textContent = ''; // il ne doit plus rester dans la page
-    document.getElementById('mdp-user').textContent   = '';
-  }
-  document.getElementById('mdp-fermer').addEventListener('click', fermerMdp);
-  document.getElementById('mdp-copier').addEventListener('click', async function () {
-    var mdp = document.getElementById('mdp-valeur').textContent;
-    try {
-      await navigator.clipboard.writeText(mdp);
-      toast('Mot de passe copié.', true);
-    } catch (e) {
-      toast('Copie impossible : sélectionne le mot de passe à la main.', false);
-    }
-  });
-
-  async function genererMotDePasse(id) {
-    var data = await api('POST', '/api/admin/utilisateurs/' + encodeURIComponent(id) + '/mot-de-passe');
-    var row  = document.querySelector('[data-row-user="' + id + '"]');
-    var nom  = row ? row.querySelector('p').textContent : '';
-    document.getElementById('mdp-user').textContent   = nom;
-    document.getElementById('mdp-valeur').textContent = data.motDePasse;
-    document.getElementById('mdp-modal').style.display = 'flex';
-    var badge = document.querySelector('[data-mdp-badge="' + id + '"]');
-    if (badge) {
-      badge.textContent      = 'Mot de passe défini';
-      badge.style.background = '#f0fdf4';
-      badge.style.color      = '#16a34a';
+    var res = await fetch('/api/pb/collections/users/records/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin: newVal }),
+    });
+    if (res.ok) {
+      btn.dataset.admin    = String(newVal);
+      btn.textContent      = newVal ? 'Admin' : 'User';
+      btn.style.background = newVal ? '#edf7ee' : '#f3f4f6';
+      btn.style.color      = newVal ? '#347645' : '#888';
     }
   }
 
   // ── Jeu : modifier infos ──────────────────────────────────────────────────
-  var JEU_TYPES = [
-    { value: '',             label: '— aucun —'  },
-    { value: 'questionaire', label: 'Questionnaire' },
-    { value: 'memorie',      label: 'Mémoire'    },
-    { value: 'reflex',       label: 'Réflexe'    },
-    { value: 'rythme',       label: 'Rythme'     },
-  ];
-
   function openJeuForm(id) {
     drawerMode = 'jeu';
-    editingId  = id || null;
-    var jeu = id ? allJeux.find(function (j) { return j.id === id; }) : null;
-    if (id && !jeu) return;
+    editingId  = id;
+    var jeu = allJeux.find(function (j) { return j.id === id; });
+    if (!jeu) return;
 
     document.getElementById('drawer-label').textContent = 'Jeux';
-    document.getElementById('drawer-title').textContent = jeu ? 'Modifier le jeu' : 'Nouveau jeu';
+    document.getElementById('drawer-title').textContent = 'Modifier le jeu';
     document.getElementById('drawer-error').style.display = 'none';
 
-    var typeSelect = '<select id="f-type" style="' + S.input + '">' +
-      JEU_TYPES.map(function (t) {
-        return '<option value="' + t.value + '"' + ((jeu ? jeu.type : '') === t.value ? ' selected' : '') + '>' + t.label + '</option>';
-      }).join('') + '</select>';
+    var imgPreview = jeu.img
+      ? '<img src="' + '/pb-files/' + jeu.collectionName + '/' + jeu.id + '/' + jeu.img
+        + '" style="width:100%; height:140px; object-fit:cover; border-radius:8px; margin-bottom:8px; display:block;" />'
+      : '';
 
     document.getElementById('drawer-body').innerHTML =
       '<p style="' + S.section + '">Informations</p>' +
-      field('nom',         'Nom du jeu *',  'text', jeu ? jeu.nom : '') +
-      area ('description', 'Description',           jeu ? jeu.description : '') +
-      '<div style="' + S.group + '"><label for="f-type" style="' + S.label + '">Type</label>' + typeSelect + '</div>' +
-      imagesBlock('img', 'Images', jeu ? jeu.images : [], true);
+      field('nom',         'Nom du jeu *',  'text', jeu.nom) +
+      area ('description', 'Description',           jeu.description) +
+      '<p style="' + S.section + '">Image</p>' +
+      '<div style="' + S.group + '">' + imgPreview +
+        '<label style="' + S.label + '">' + (jeu.img ? 'Remplacer l\'image' : 'Choisir une image') + '</label>' +
+        '<input id="f-img" type="file" accept="image/*" style="font-size:13px; color:#555;" />' +
+      '</div>';
 
     openDrawer();
   }
@@ -587,9 +455,18 @@
     var fd = new FormData();
     fd.append('nom', nom);
     fd.append('description', val('description'));
-    fd.append('type', document.getElementById('f-type').value);
-    appendImages(fd, 'img', false);
-    await api(editingId ? 'PATCH' : 'POST', '/api/admin/jeux' + (editingId ? '/' + encodeURIComponent(editingId) : ''), fd);
+    var imgFile = fileVal('img');
+    if (imgFile) fd.append('img', imgFile);
+    var res = await fetch('/api/pb/collections/jeux/records/' + editingId,
+      { method: 'PATCH', body: fd });
+    if (!res.ok) throw new Error((await res.json()).message || 'Erreur PocketBase.');
+    var updated = await res.json();
+    // Update local cache
+    var idx = allJeux.findIndex(function (j) { return j.id === editingId; });
+    if (idx >= 0) allJeux[idx].nom = updated.nom ?? allJeux[idx].nom;
+    // Update row in DOM
+    var row = document.querySelector('[data-row-jeu="' + editingId + '"]');
+    if (row) row.querySelector('p').textContent = updated.nom ?? nom;
   }
 
   // ── Jeu : questions ───────────────────────────────────────────────────────
@@ -666,16 +543,22 @@
     var c2 = document.getElementById('dq-choix-2').value.trim();
     var c3 = document.getElementById('dq-choix-3').value.trim();
     var c4 = document.getElementById('dq-choix-4').value.trim();
-    var rep   = parseInt(document.getElementById('dq-reponse').value, 10);
+    var rep   = parseInt(document.getElementById('dq-reponse').value);
     var theme = document.getElementById('dq-theme').value;
 
     if (!question || !c1 || !c2 || !c3 || !c4) throw new Error('Tous les champs sont obligatoires.');
 
-    await api('PATCH', '/api/admin/questions/' + encodeURIComponent(editingId), {
-      question: question,
-      choix_1: c1, choix_2: c2, choix_3: c3, choix_4: c4,
-      reponse: rep, theme: theme,
+    var res = await fetch('/api/pb/collections/jeux_questionaire/records/' + editingId, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question: question,
+        choix_1: c1, choix_2: c2, choix_3: c3, choix_4: c4,
+        reponse_1: rep === 1, reponse_2: rep === 2, reponse_3: rep === 3, reponse_4: rep === 4,
+        theme: theme,
+      }),
     });
+    if (!res.ok) throw new Error((await res.json()).message || 'Erreur PocketBase.');
 
     // Mettre à jour le cache local
     var idx = allQuestions.findIndex(function (q) { return q.id === editingId; });
@@ -716,8 +599,8 @@
         '</div>' +
         '<span style="font-size:11px; font-weight:600; color:#7c3aed; background:#f5f3ff; padding:3px 10px; border-radius:20px; width:fit-content;">' + escText(themeLabel) + '</span>' +
         '<div style="display:flex; justify-content:flex-end; gap:6px;">' +
-          '<button data-action="edit-question" data-id="' + escAttr(q.id) + '" style="height:28px; padding:0 12px; background:#f0fdf4; border:1px solid #d1fae5; color:#347645; font-size:12px; font-weight:600; cursor:pointer; border-radius:6px;">Modifier</button>' +
-          '<button data-action="delete-question" data-id="' + escAttr(q.id) + '" style="height:28px; padding:0 12px; background:#fff5f5; border:1px solid #fecaca; color:#ef4444; font-size:12px; font-weight:600; cursor:pointer; border-radius:6px;">Supp.</button>' +
+          '<button data-action="edit-question" data-id="' + q.id + '" style="height:28px; padding:0 12px; background:#f0fdf4; border:1px solid #d1fae5; color:#347645; font-size:12px; font-weight:600; cursor:pointer; border-radius:6px;">Modifier</button>' +
+          '<button data-action="delete-question" data-id="' + q.id + '" style="height:28px; padding:0 12px; background:#fff5f5; border:1px solid #fecaca; color:#ef4444; font-size:12px; font-weight:600; cursor:pointer; border-radius:6px;">Supp.</button>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -726,9 +609,13 @@
   }
 
   async function deleteQuestion(id) {
-    await api('DELETE', '/api/admin/questions/' + encodeURIComponent(id));
-    allQuestions = allQuestions.filter(function (q) { return q.id !== id; });
-    renderQuestionsList();
+    var res = await fetch('/api/pb/collections/jeux_questionaire/records/' + id, {
+      method: 'DELETE',
+    });
+    if (res.ok) {
+      allQuestions = allQuestions.filter(function (q) { return q.id !== id; });
+      renderQuestionsList();
+    }
   }
 
   // ── Ajouter question ──────────────────────────────────────────────────────
@@ -742,7 +629,7 @@
     var c2 = document.getElementById('q-choix-2').value.trim();
     var c3 = document.getElementById('q-choix-3').value.trim();
     var c4 = document.getElementById('q-choix-4').value.trim();
-    var rep  = parseInt(document.getElementById('q-reponse').value, 10);
+    var rep  = parseInt(document.getElementById('q-reponse').value);
     var theme = document.getElementById('q-theme').value;
 
     if (!question || !c1 || !c2 || !c3 || !c4) {
@@ -753,11 +640,19 @@
 
     btn.disabled = true; btn.textContent = 'Ajout…';
     try {
-      var created = await api('POST', '/api/admin/questions', {
+      var body = {
         question: question,
         choix_1: c1, choix_2: c2, choix_3: c3, choix_4: c4,
-        reponse: rep, theme: theme,
+        reponse_1: rep === 1, reponse_2: rep === 2, reponse_3: rep === 3, reponse_4: rep === 4,
+        theme: theme,
+      };
+      var res = await fetch('/api/pb/collections/jeux_questionaire/records', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       });
+      if (!res.ok) throw new Error((await res.json()).message || 'Erreur.');
+      var created = await res.json();
       allQuestions.push({
         id: created.id, question: question,
         choix_1: c1, choix_2: c2, choix_3: c3, choix_4: c4,
@@ -779,19 +674,9 @@
   });
 
   // ── Event delegation ──────────────────────────────────────────────────────
-  document.addEventListener('change', function (e) {
-    var select = e.target.closest && e.target.closest('select[data-action="set-abonnement"]');
-    if (select) changeAbonnement(select);
-  });
-
-  // Valeur initiale des listes d'abonnement (pour revenir en arrière en cas d'échec)
-  document.querySelectorAll('select[data-action="set-abonnement"]').forEach(function (s) {
-    s.dataset.prev = s.value;
-  });
-
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('[data-action]');
-    if (!btn || btn.tagName === 'SELECT') return;
+    if (!btn) return;
     var action = btn.dataset.action;
     var id     = btn.dataset.id;
 
@@ -814,7 +699,7 @@
     } else if (action === 'delete-user') {
       openConfirm('Supprimer l\'utilisateur',
         'Le compte et toutes ses données seront définitivement supprimés.',
-        function () { return deleteRecord('/api/admin/utilisateurs', id, 'data-row-user'); });
+        function () { return deleteRecord('users', id, 'data-row-user'); });
     } else if (action === 'toggle-admin') {
       var isAdmin = btn.dataset.admin === 'true';
       openConfirm(
@@ -822,36 +707,24 @@
         isAdmin ? 'Cet utilisateur ne pourra plus accéder au panneau d\'administration.'
                 : 'Cet utilisateur pourra accéder au panneau d\'administration.',
         function () { return toggleAdmin(id, isAdmin, btn); });
-    } else if (action === 'toggle-verifie') {
-      toggleVerifie(btn);
-    } else if (action === 'set-points') {
-      setPoints(btn);
-    } else if (action === 'temp-password') {
-      openConfirm('Définir un mot de passe temporaire',
-        'Un nouveau mot de passe aléatoire sera généré et remplacera l\'actuel (s\'il existe). Il ne sera affiché qu\'une seule fois : tu devras le transmettre à l\'utilisateur.',
-        function () { return genererMotDePasse(id); });
     } else if (action === 'delete-bar') {
       openConfirm('Supprimer le bar',
         'Ce bar sera définitivement supprimé.',
-        function () { return deleteRecord('/api/admin/bars', id, 'data-row-bar'); });
+        function () { return deleteRecord('bar', id, 'data-row-bar'); });
     } else if (action === 'delete-session') {
       openConfirm('Supprimer la session',
         'Cette session et toutes ses données seront définitivement supprimées.',
-        function () { return deleteRecord('/api/admin/sessions', id, 'data-row-session'); });
+        function () { return deleteRecord('session_barathon', id, 'data-row-session'); });
     } else if (action === 'delete-boison') {
       openConfirm('Supprimer la boisson',
         'Cette boisson sera définitivement supprimée.',
-        function () { return deleteRecord('/api/admin/boissons', id, 'data-row-boison'); });
-    } else if (action === 'delete-jeu') {
-      openConfirm('Supprimer le jeu',
-        'Ce jeu sera définitivement supprimé.',
-        function () { return deleteRecord('/api/admin/jeux', id, 'data-row-jeu'); });
+        function () { return deleteRecord('boison', id, 'data-row-boison'); });
     } else if (action === 'open-boutique-form') {
       openBoutiqueForm(id);
     } else if (action === 'delete-boutique') {
       openConfirm('Supprimer l\'article',
         'Cet article de boutique sera définitivement supprimé.',
-        function () { return deleteRecord('/api/admin/boutique', id, 'data-row-boutique'); });
+        function () { return deleteRecord('boutique', id, 'data-row-boutique'); });
     }
   });
 })();

@@ -1,0 +1,24 @@
+// =====================================================================
+// BARGO : configuration Cloudflare Workers (wrangler).
+// Aucun secret ici. PocketBase reste la base de données : son URL (PB_URL)
+// est lue au build (voir astro.config.mjs, env.schema).
+// =====================================================================
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "bargo",
+	// Worker généré par @astrojs/cloudflare (v12) dans dist/_worker.js/.
+	"main": "./dist/_worker.js/index.js",
+	"compatibility_date": "2026-01-14",
+	// API Node utilisées par Astro et ses dépendances.
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	// Fichiers statiques (dist/) ; public/.assetsignore exclut _worker.js et _routes.json.
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS"
+	},
+	"observability": {
+		"enabled": true
+	}
+}

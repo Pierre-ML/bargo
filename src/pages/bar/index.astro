@@ -1,14 +1,25 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import ImageFichier from '../../components/ImageFichier.astro';
-import { listerBars, idsFavoris } from '../../lib/db.ts';
+import PbImage from '../../components/PbImage.astro';
+import { getCollection, PB_URL } from '../../../backend/backend.js';
 import LikeButton from '../../components/LikeButton.astro';
 
-const bars = listerBars();
+const bars = await getCollection('bar', { sort: 'nom', perPage: 200 });
 
-const userId = Astro.locals.user?.id;
-const isAuth = !!userId;
-const barFavori = isAuth ? idsFavoris(userId, 'bar') : new Set();
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+const isAuth = !!(token && userId);
+
+let barFavori = [];
+if (isAuth) {
+  const userRes = await fetch(`${PB_URL}/api/collections/users/records/${userId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (userRes.ok) {
+    const user = await userRes.json();
+    barFavori = Array.isArray(user.bar_favori) ? user.bar_favori : [];
+  }
+}
 ---
 
 <Layout title="Nos bars — Bargo">
@@ -47,7 +58,7 @@ const barFavori = isAuth ? idsFavoris(userId, 'bar') : new Set();
 
             <!-- Image -->
             <div class="w-full h-50 lg:h-75 overflow-hidden">
-              <ImageFichier cle={bar.image} alt={bar.nom} width={405} height={300} class="w-full h-full object-cover" />
+              <PbImage record={bar} recordImage={bar.img?.[0]} width={405} height={300} class="w-full h-full object-cover" />
             </div>
 
             <!-- Contenu -->
@@ -72,7 +83,7 @@ const barFavori = isAuth ? idsFavoris(userId, 'bar') : new Set();
                 </a>
                 <!-- Cœur -->
                 {isAuth && (
-                  <LikeButton id={bar.id} liked={barFavori.has(bar.id)} variant="bar" class="lg:absolute lg:top-37.75 lg:right-5.25 w-10.25 h-10.25 flex items-center justify-center shrink-0 bg-transparent border-0 cursor-pointer p-0" ariaLabel="Ajouter aux favoris" />
+                  <LikeButton id={bar.id} liked={barFavori.includes(bar.id)} variant="bar" class="lg:absolute lg:top-37.75 lg:right-5.25 w-10.25 h-10.25 flex items-center justify-center shrink-0 bg-transparent border-0 cursor-pointer p-0" ariaLabel="Ajouter aux favoris" />
                 )}
               </div>
 

@@ -1,30 +1,39 @@
 ---
 // @ts-nocheck
 import Layout from '../../layouts/Layout.astro';
-import { listerQuestionsAleatoires } from '../../lib/db.ts';
+import { PB_URL } from '../../../backend/backend.js';
 
-if (!Astro.locals.user) return Astro.redirect('/connexion?redirect=' + encodeURIComponent(Astro.url.pathname + Astro.url.search));
-
-const THEMES_VALIDES = ['jeux_video', 'histoire', 'cultrue_g'];
+const token  = Astro.cookies.get('pb_token')?.value ?? '';
+const userId = Astro.cookies.get('pb_user_id')?.value ?? '';
+if (!token || !userId) return Astro.redirect('/connexion');
 
 const rawThemes = Astro.url.searchParams.get('themes') ?? '';
-const themes    = rawThemes.split(',').filter((t) => THEMES_VALIDES.includes(t));
+const themes    = rawThemes.split(',').filter(Boolean);
 const time      = Math.max(5, Math.min(60, parseInt(Astro.url.searchParams.get('time') ?? '20')));
 const sessionId = Astro.url.searchParams.get('session') ?? '';
-const inSession = !!sessionId;
+const inSession = !!(sessionId && token && userId);
 
 if (themes.length === 0) {
   return Astro.redirect('/jeux_questionaire');
 }
 
-// 10 questions tirées au hasard dans les thèmes choisis (ordre mélangé par la base)
-const allQ       = listerQuestionsAleatoires(themes, 10);
-const fetchError = null;
+const filterParts = themes.map(t => `theme="${t}"`).join('||');
+const filter      = encodeURIComponent(filterParts);
+const res         = await fetch(`${PB_URL}/api/collections/jeux_questionaire/records?perPage=100&sort=@random&filter=${filter}`);
+const data        = await res.json();
+const allQ        = data.items ?? [];
+const fetchError  = !res.ok ? `HTTP ${res.status} — ${data?.message ?? 'erreur inconnue'}` : null;
+
+// Shuffle + take 10
+for (let i = allQ.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [allQ[i], allQ[j]] = [allQ[j], allQ[i]];
+}
 
 const themeLabels = { cultrue_g: 'Culture générale', jeux_video: 'Jeux vidéo', histoire: 'Histoire' };
 function tLabel(t) { return themeLabels[t] ?? t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); }
 
-const questions = allQ.map(q => ({
+const questions = allQ.slice(0, 10).map(q => ({
   q: q.question,
   c: [q.choix_1, q.choix_2, q.choix_3, q.choix_4],
   a: [q.reponse_1, q.reponse_2, q.reponse_3, q.reponse_4].findIndex(v => v === true),
@@ -141,13 +150,15 @@ const questions = allQ.map(q => ({
     </main>
   )}
 
-  <script is:inline define:vars={{ quizData: { questions, time, inSession } }}>
-    // Les points sont calculés et plafonnés par le serveur (POST /api/jeux/score).
+  <script is:inline define:vars={{ quizData: { questions, time, userId, inSession } }}>
+    // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+    // vers PB_URL côté serveur, et lit le token depuis le cookie httpOnly.
     var d = quizData;
     if (!d || !d.questions || d.questions.length === 0) { /* no-op */ } else {
 
     var questions    = d.questions;
     var time         = d.time;
+    var quizUserId   = d.userId;
     var quizInSession = d.inSession;
 
     var cur          = 0;
@@ -233,10 +244,14 @@ const questions = allQ.map(q => ({
       var pct = correctCount / questions.length;
       $('result-title').textContent = pct >= 0.8 ? 'Excellent !' : pct >= 0.5 ? 'Bien joué !' : 'Pas mal !';
       var circleSection = $('result-circle-section');
-      $('result-correct').textContent = String(correctCount);
-      $('result-score').textContent   = score + ' pts';
-      $('result-mult').textContent    = 'x' + multiplier + ' — ' + ptsPerQ + ' pts par bonne réponse';
-      if (circleSection) circleSection.style.display = '';
+      if (quizUserId) {
+        $('result-correct').textContent = String(correctCount);
+        $('result-score').textContent   = score + ' pts';
+        $('result-mult').textContent    = 'x' + multiplier + ' — ' + ptsPerQ + ' pts par bonne réponse';
+        if (circleSection) circleSection.style.display = '';
+      } else {
+        if (circleSection) circleSection.style.display = 'none';
+      }
       setTimeout(function () {
         var bar = $('result-bar');
         if (bar) bar.style.width = (pct * 100) + '%';
@@ -245,11 +260,17 @@ const questions = allQ.map(q => ({
     }
 
     function savePoints(pts) {
-      fetch('/api/jeux/score', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ jeu: 'questionaire', score: pts }),
-      }).catch(function () {});
+      fetch('/api/pb/collections/users/records/' + quizUserId)
+      .then(function (r) { return r.json(); })
+      .then(function (u) {
+        var current = u.points ?? 0;
+        return fetch('/api/pb/collections/users/records/' + quizUserId, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ points: current + pts }),
+        });
+      })
+      .catch(function () {});
     }
 
     document.querySelectorAll('.choice-btn').forEach(function (btn) {

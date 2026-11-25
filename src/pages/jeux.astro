@@ -1,20 +1,22 @@
 ---
 // @ts-nocheck
 import Layout from '../layouts/Layout.astro';
-import ImageFichier from '../components/ImageFichier.astro';
+import PbImage from '../components/PbImage.astro';
 import LikeButton from '../components/LikeButton.astro';
 import Pagination from '../components/Pagination.astro';
 import HeroSection from '../components/HeroSection.astro';
-import { listerJeuxPage, idsFavoris } from '../lib/db.ts';
+import { PB_URL } from '../../backend/backend.js';
 
-const userId  = Astro.locals.user?.id;
-const isAuth  = !!userId;
-const page    = Math.max(1, parseInt(Astro.url.searchParams.get('page') ?? '1') || 1);
+const token   = Astro.cookies.get('pb_token')?.value;
+const userId  = Astro.cookies.get('pb_user_id')?.value;
+const isAuth  = !!(token && userId);
+const page    = parseInt(Astro.url.searchParams.get('page') ?? '1');
 const perPage = 9; // 3 colonnes × 3 lignes
 
-const { jeux, total } = listerJeuxPage(perPage, (page - 1) * perPage);
-const totalPages = Math.ceil(total / perPage);
-const jeuFavori = isAuth ? idsFavoris(userId, 'jeu') : new Set();
+const res  = await fetch(`${PB_URL}/api/collections/jeux/records?page=${page}&perPage=${perPage}&sort=created`);
+const data = await res.json();
+const jeux       = data.items ?? [];
+const totalPages = Math.ceil((data.totalItems ?? 0) / perPage);
 
 ---
 
@@ -33,12 +35,13 @@ const jeuFavori = isAuth ? idsFavoris(userId, 'jeu') : new Set();
     {jeux.length > 0 ? (
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-8">
         {jeux.map(jeu => {
+          const imageFile = Array.isArray(jeu.img) ? jeu.img[0] : jeu.img;
           return (
             <div class="bg-white rounded-0.5 shadow-md overflow-hidden">
 
               <!-- Image -->
               <div class="w-full h-50 lg:h-75 overflow-hidden">
-                <ImageFichier cle={jeu.image} alt={jeu.nom} width={405} height={300} class="w-full h-full object-cover" />
+                <PbImage record={jeu} recordImage={imageFile} width={405} height={300} class="w-full h-full object-cover" />
               </div>
 
               <!-- Contenu -->
@@ -58,10 +61,10 @@ const jeuFavori = isAuth ? idsFavoris(userId, 'jeu') : new Set();
                   {(() => {
                     const href = !isAuth
                       ? '/connexion'
-                      : jeu.type === 'questionaire' ? '/jeux_questionaire'
-                      : jeu.type === 'memorie'      ? '/jeux_memoire'
-                      : jeu.type === 'reflex'       ? '/jeux_reflexe'
-                      : jeu.type === 'rythme'       ? '/jeux_rythme'
+                      : jeu.type_du_jeux === 'questionaire' ? '/jeux_questionaire'
+                      : jeu.type_du_jeux === 'memorie'      ? '/jeux_memoire'
+                      : jeu.type_du_jeux === 'reflex'       ? '/jeux_reflexe'
+                      : jeu.type_du_jeux === 'rythme'       ? '/jeux_rythme'
                       : '#';
                     return (
                       <a href={href}
@@ -72,7 +75,7 @@ const jeuFavori = isAuth ? idsFavoris(userId, 'jeu') : new Set();
                   })()}
                   <!-- Like -->
                   {isAuth && (
-                    <LikeButton id={jeu.id} liked={jeuFavori.has(jeu.id)} variant="jeux" class="lg:absolute lg:top-37.75 lg:right-5.25 w-10.25 h-10.25 flex items-center justify-center shrink-0 bg-transparent border-0 cursor-pointer p-0" ariaLabel="Ajouter aux favoris" />
+                    <LikeButton id={jeu.id} variant="jeux" class="lg:absolute lg:top-37.75 lg:right-5.25 w-10.25 h-10.25 flex items-center justify-center shrink-0 bg-transparent border-0 cursor-pointer p-0" ariaLabel="Ajouter aux favoris" />
                   )}
                 </div>
 

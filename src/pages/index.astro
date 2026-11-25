@@ -2,11 +2,12 @@
 // index.astro — Page d'accueil BARGO (utilisateurs connectés)
 import Layout from '../layouts/Layout.astro';
 
-// Session better-auth lue par le middleware (src/middleware.js)
-if (!Astro.locals.user) return Astro.redirect('/LandingPage');
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+if (!token || !userId) return Astro.redirect('/LandingPage');
 import { Image } from 'astro:assets';
-import { listerBars } from '../lib/db.ts';
-import ImageFichier from '../components/ImageFichier.astro';
+import { getCollection } from '../../backend/backend.js';
+import PbImage from '../components/PbImage.astro';
 import Faq from '../components/Faq.astro';
 import Partenaires from '../components/Partenaires.astro';
 
@@ -23,7 +24,7 @@ import membre1        from '../assets/img/melvyn_philippon.avif';
 import membre2        from '../assets/img/pierre_mouilleseaux_lhuillier.avif';
 import membre3        from '../assets/img/alex_ringenbach.avif';
 
-const bars = listerBars();
+const bars = await getCollection('bar', { sort: 'created' });
 
 ---
 
@@ -123,7 +124,7 @@ const bars = listerBars();
         <div class="flex flex-col lg:flex-row h-full flex-none" style={`width: ${100 / bars.length}%`}>
           <!-- Image -->
           <div class="w-full h-50 lg:w-211.25 lg:h-full shrink-0 overflow-hidden">
-            <ImageFichier cle={bar.image} alt={bar.nom} width={845} height={670} />
+            <PbImage record={bar} recordImage={bar.img?.[0]} width={845} height={670} />
           </div>
           <!-- Infos -->
           <div class="bg-neutral-800 flex-1 flex flex-col pt-5 lg:pt-19 pl-5 lg:pl-27.25 pr-5 lg:pr-20 overflow-hidden">

@@ -2,6 +2,7 @@
 // @ts-nocheck
 import Layout from '../layouts/Layout.astro';
 import { Image } from 'astro:assets';
+import { PB_URL, getCollectionAuth } from '../../backend/backend.js';
 import checkIcon from '../assets/icon/check.svg';
 import userIcon     from '../assets/icon/user.svg';
 import downloadIcon  from '../assets/icon/download.svg';
@@ -15,9 +16,14 @@ import discordIcon  from '../assets/icon/discord.svg';
 import searchIcon   from '../assets/icon/search.svg';
 import '../styles/bienvenue.css';
 
-if (!Astro.locals.user) {
-  return Astro.redirect('/connexion?redirect=' + encodeURIComponent(Astro.url.pathname));
-}
+const token  = Astro.cookies.get('pb_token')?.value;
+const userId = Astro.cookies.get('pb_user_id')?.value;
+if (!token || !userId) return Astro.redirect('/connexion');
+
+const usersRaw = await getCollectionAuth('users', token, { perPage: 200, sort: 'pseudo' });
+const allUsers = usersRaw
+  .filter(u => u.id !== userId)
+  .map(u => ({ id: u.id, collectionName: u.collectionName, pseudo: u.pseudo ?? '', prenom: u.prenom ?? '', nom: u.nom ?? '', avatar: u.avatar ?? null }));
 ---
 
 <Layout title="Bienvenue sur Bargo" noFooter={true}>
@@ -226,7 +232,7 @@ if (!Astro.locals.user) {
               <span style="font-size:16px; font-weight:700; color:white;">Facebook</span>
             </div>
             <div style="background:#f7f1ed; border-radius:5px; box-shadow:0 4px 10px rgba(0,0,0,0.25); height:61px; display:flex; align-items:center; padding:0 20px;">
-              <input id="f-facebook" type="text" placeholder="Nom Facebook"
+              <input id="f-facbook" type="text" placeholder="Nom Facebook"
                 style="background:transparent; width:100%; font-size:14px; font-weight:500; outline:none; border:none; color:#1e1e1e;"
                 class="placeholder-neutral-500" />
             </div>
@@ -303,11 +309,9 @@ if (!Astro.locals.user) {
 
 </Layout>
 
-<script is:inline>
-  // Appels vers /api/... : le cookie de session httpOnly est envoyé automatiquement.
-  // Les utilisateurs ne sont plus embarqués dans la page : ils viennent de
-  // GET /api/utilisateurs/recherche (pseudo, avatar), mis en cache ici.
-  var allUsers     = [];
+<script is:inline define:vars={{ pbUserId: userId, allUsers }}>
+  // Le navigateur ne parle jamais directement à PocketBase : /api/pb relaie
+  // vers PB_URL côté serveur, et lit le token depuis le cookie httpOnly.
   var TOTAL        = 4;
   var cur          = 1;
   var selectedAmis = [];
@@ -393,7 +397,7 @@ if (!Astro.locals.user) {
   // ── API ──────────────────────────────────────────────────
   async function patchUser(data) {
     try {
-      await fetch('/api/profil', {
+      await fetch('/api/pb/collections/users/records/' + pbUserId, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -406,8 +410,8 @@ if (!Astro.locals.user) {
     try {
       var fd = new FormData();
       fd.append('avatar', avatarFile);
-      await fetch('/api/profil/avatar', {
-        method: 'POST',
+      await fetch('/api/pb/collections/users/records/' + pbUserId, {
+        method: 'PATCH',
         body: fd,
       });
     } catch (_) {}
@@ -420,7 +424,7 @@ if (!Astro.locals.user) {
       var d = {};
       var prenom = ($('f-prenom') ? $('f-prenom').value : '').trim(); if (prenom) d.prenom = prenom;
       var nom    = ($('f-nom')    ? $('f-nom').value    : '').trim(); if (nom)    d.nom    = nom;
-      var age    = parseInt(($('f-age') ? $('f-age').value : '0')) || null; if (age && age >= 18 && age <= 120) d.age = age;
+      var age    = parseInt(($('f-age') ? $('f-age').value : '0')) || null; if (age && age >= 18) d.age = age;
       var ville  = ($('f-ville')  ? $('f-ville').value  : '').trim(); if (ville)  d.ville  = ville;
       if (Object.keys(d).length) await patchUser(d);
     }
@@ -428,7 +432,7 @@ if (!Astro.locals.user) {
       var d2 = {};
       var desc    = ($('f-description') ? $('f-description').value : '').trim(); if (desc)    d2.description = desc;
       var insta   = ($('f-insta')       ? $('f-insta').value       : '').trim(); if (insta)   d2.insta       = insta;
-      var facebook = ($('f-facebook') ? $('f-facebook').value : '').trim(); if (facebook) d2.facebook = facebook;
+      var facbook = ($('f-facbook')     ? $('f-facbook').value     : '').trim(); if (facbook) d2.facbook     = facbook;
       var discord = ($('f-discord')     ? $('f-discord').value     : '').trim(); if (discord) d2.discord     = discord;
       if (Object.keys(d2).length) await patchUser(d2);
     }
@@ -437,11 +441,20 @@ if (!Astro.locals.user) {
       for (var i = 0; i < selectedAmis.length; i++) {
         var targetId = selectedAmis[i];
         try {
-          await fetch('/api/amis/demande', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ami_id: targetId }),
-          });
+          // Récupérer les demandes existantes de l'utilisateur cible
+          var r = await fetch('/api/pb/collections/users/records/' + targetId);
+          if (r.ok) {
+            var targetUser = await r.json();
+            var existing   = Array.isArray(targetUser.demande_amies) ? targetUser.demande_amies : [];
+            if (existing.indexOf(pbUserId) < 0) {
+              existing.push(pbUserId);
+              await fetch('/api/pb/collections/users/records/' + targetId, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ demande_amies: existing }),
+              });
+            }
+          }
         } catch (_) {}
       }
       window.location.href = '/profil';
@@ -457,13 +470,7 @@ if (!Astro.locals.user) {
 
   // ── Amis ─────────────────────────────────────────────────
   function imgUrl(u) {
-    return typeof u.avatar === 'string' && u.avatar.indexOf('/fichiers/') === 0 ? u.avatar : null;
-  }
-
-  function memoriser(liste) {
-    liste.forEach(function (u) {
-      if (!allUsers.some(function (x) { return x.id === u.id; })) allUsers.push(u);
-    });
+    return u.avatar ? '/pb-files/' + u.collectionName + '/' + u.id + '/' + u.avatar : null;
   }
 
   function av(u, size) {
@@ -495,39 +502,13 @@ if (!Astro.locals.user) {
     });
   }
 
-  var derniersResultats = [];
-  var minuterieRecherche = null;
-
-  function rechercher(q) {
-    q = (q || '').trim();
-    clearTimeout(minuterieRecherche);
-    if (q.length < 2) { derniersResultats = []; afficherListe(q); return; }
-    minuterieRecherche = setTimeout(function () {
-      fetch('/api/utilisateurs/recherche?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
-        .then(function (r) { return r.ok ? r.json() : []; })
-        .then(function (data) {
-          var liste = Array.isArray(data) ? data : (data && (data.utilisateurs || data.resultats)) || [];
-          memoriser(liste);
-          derniersResultats = liste.slice(0, 12);
-          afficherListe(q);
-        })
-        .catch(function () { derniersResultats = []; afficherListe(q); });
-    }, 250);
-  }
-
-  function renderList() {
-    var s = $('ami-search');
-    afficherListe(s ? s.value.trim() : '');
-  }
-
-  function afficherListe(q) {
+  function renderList(q) {
     var el = $('ami-list');
     if (!el) return;
-    if ((q || '').length < 2) {
-      el.innerHTML = '<p style="color:rgba(255,255,255,0.3);font-size:13px;margin:0;">Tape au moins 2 lettres du pseudo.</p>';
-      return;
-    }
-    var filtered = derniersResultats;
+    q = (q || '').toLowerCase();
+    var filtered = allUsers.filter(function (u) {
+      return !q || (u.pseudo + ' ' + u.prenom + ' ' + u.nom).toLowerCase().includes(q);
+    }).slice(0, 12);
 
     el.innerHTML = filtered.map(function (u) {
       var sel = selectedAmis.indexOf(u.id) >= 0;
@@ -550,8 +531,8 @@ if (!Astro.locals.user) {
   }
 
   var amiSearch = $('ami-search');
-  if (amiSearch) amiSearch.addEventListener('input', function () { rechercher(this.value); });
+  if (amiSearch) amiSearch.addEventListener('input', function () { renderList(this.value); });
 
   showPanel(1);
-  renderList();
+  renderList('');
 </script>

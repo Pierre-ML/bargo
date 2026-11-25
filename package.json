@@ -5,18 +5,20 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview",
+    "preview": "astro build && wrangler dev",
     "astro": "astro",
-    "deploy": "node deploy.js"
+    "deploy": "astro build && wrangler deploy"
   },
   "dependencies": {
-    "@astrojs/node": "^9.5.5",
+    "@astrojs/cloudflare": "^12.6.13",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/manrope": "^5.2.8",
     "@tailwindcss/vite": "^4.2.1",
     "astro": "^5.17.3",
-    "better-auth": "^1.7.27",
-    "better-sqlite3": "^13.2.0",
+    "pocketbase": "^0.27.3",
     "tailwindcss": "^4.2.1"
+  },
+  "devDependencies": {
+    "wrangler": "^4.168.0"
   }
 }
